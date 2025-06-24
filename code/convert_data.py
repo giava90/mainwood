@@ -116,7 +116,7 @@ if __name__ == "__main__":
     save_intermediate = sys.argv[4]
     case_study = sys.argv[5]
     # input_folder_path = f"/cluster/work/climate/amauri/{case_study}/Results/mgmt_{management_scenario}/dead.trees/"
-    # output_folder_path = f"/scratch/gvaccario/mainwood/{case_study}/"
+    # output_folder_path = f"/cluster/scratch/giacomov/mainwood/{case_study}/"
     # input_folder_path = f"../data/{case_study}/inputs/{management_scenario}/dead.trees/"
     input_folder_path = f"../../entlebuch_minimal_euler/data/entlebuch/d.trees4giacomo/dead.trees.{management_scenario}/"
     output_folder_path = f"../data/{case_study}/"
