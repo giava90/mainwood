@@ -20,6 +20,7 @@ if __name__ == "__main__":
             dead_cohorts = True
         else:
             dead_cohorts = False
-        data_out = output_input_converter(folder_in, data_in, dead_cohorts=dead_cohorts)
+        print("dead_cohorts", dead_cohorts, type(dead_cohorts))
+        data_out = output_input_converter(data_in, dead_cohorts=dead_cohorts)
         # Save the data to a new file
         data_out.to_csv(f'{folder_out + file_out_name}', index=False , sep=';')

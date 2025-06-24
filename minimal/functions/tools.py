@@ -69,12 +69,12 @@ def map_species(latin_species):
     return species_mapping
 
 
-def import_classification_of_trees(folder_inputs):
+def import_classification_of_trees(folder_path_sorsim):
     """
     This function imports the classification of trees from the ForClim tool and maps the species names to the Baumart-Code of the input data for SorClim.
 
     Parameters:
-    folder_inputs (str): The path to the folder containing the input data about the species.
+    folder_path_sorsim (string): folder path where templates for sorsim are stored
     
     Returns:
     id_to_species_ForClim (dict): A dictionary from the speciesid to the latin name of the species from the ForClim tool.
@@ -82,7 +82,7 @@ def import_classification_of_trees(folder_inputs):
     species_mapping (dict): A dictionary from the latin species names to the Baumart-Code.
     """        
     # we take the labelling of the species of the ForClim output
-    df_species_and_ids = pd.read_csv(folder_inputs +'templateSpec_v2.txt', sep='\t', index_col=0)
+    df_species_and_ids = pd.read_csv(folder_path_sorsim + 'templateSpec_v2.txt', sep='\t', index_col=0)
     # we create a list of the unique species names
     latin_species = df_species_and_ids.index.tolist()
     # we create a mapping from the latin species names to the Baumart-Code
@@ -94,15 +94,15 @@ def import_classification_of_trees(folder_inputs):
     id_to_species_ForClim = {row['speciesID']: index for index, row in df_species_and_ids.iterrows()}
     return id_to_species_ForClim, ForClim_species_to_Baumart_Code, species_mapping
 
-def output_input_converter(folder_inputs, data_out_ForClim, dead_cohorts = False, only_harvested = True):    
+def output_input_converter(data_out_ForClim, dead_cohorts = False, only_harvested = True, folder_path_sorsim = "../minimal/"):    
     """
     This function takes the output of the ForClim tool and converts it to the input format of the SorClim tool.
 
     Parameters:
-    folder_inputs (str): The path to the folder containing the input data about the species.
     data_out_ForClim (pd.DataFrame): The output of the ForClim tool.
     dead_cohorts (bool): If True, the function will keep the dead cohorts in the output. If False, it will not.
     only_harvested (bool): Only used when dead_cohorts is True. If True, the function will keep only the harvested trees in the output. If False, it will keep all trees.
+    folder_path_sorsim (string): path where templates information for SorSim are stored
 
     Returns:
     data_out_ForClim_as_in_SorSim (pd.DataFrame): The output of the ForClim tool in the input format of the SorClim tool.
@@ -118,7 +118,7 @@ def output_input_converter(folder_inputs, data_out_ForClim, dead_cohorts = False
     data_out_ForClim_as_in_SorSim = data_out_ForClim[columns].copy()
     del data_out_ForClim
     # we import the classification of trees from the ForClim tool and map the species names to the Baumart-Code of the input data for SorClim
-    id_to_species_ForClim, ForClim_species_to_Baumart_Code, species_mapping = import_classification_of_trees(folder_inputs)
+    id_to_species_ForClim, ForClim_species_to_Baumart_Code, species_mapping = import_classification_of_trees(folder_path_sorsim)
     # then we add a column to the dataframe with the latin name
     data_out_ForClim_as_in_SorSim['FullLatinName'] = data_out_ForClim_as_in_SorSim['speciesid'].map(id_to_species_ForClim)
     # add column Baumart-Code to the data_out_ForClim_as_in_SorSim

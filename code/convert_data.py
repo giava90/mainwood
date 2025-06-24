@@ -67,7 +67,7 @@ def process_files(files, input_folder_path, output_folder_path, management_scena
         failed = manager.list()
 
         if sample == "True":
-            sample_size = min(len(files), 100)
+            sample_size = min(len(files), 10)
             files = files[:sample_size]
 
         # Step 1: Convert ForClim Output in Parallel
