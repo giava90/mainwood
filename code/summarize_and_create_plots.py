@@ -793,7 +793,7 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
 
 def process_combination(args):
     global case_study, management
-    case_study, management, start_time = args
+    case_study, management, folder_path, start_time = args
     # --- Configuration ---
     folder_path = f"{folder_path}/{case_study}/outputs/{management}/"
     stand_data_path = f"../data/{case_study}/stand.details.csv"
@@ -915,7 +915,7 @@ if __name__ == "__main__":
      # Select what to run
     case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study_input == "All" else [case_study_input]
     scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_input == "ALL" else [management_input]
-    combinations = [(cs, ms, start_time) for cs in case_studies_to_run for ms in scenarios_to_run]
+    combinations = [(cs, ms, folder_path, start_time) for cs in case_studies_to_run for ms in scenarios_to_run]
 
     with Pool(processes=num_cores) as pool:
         results = pool.map(process_combination, combinations)
