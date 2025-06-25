@@ -900,9 +900,10 @@ if __name__ == "__main__":
     case_study_input = sys.argv[1] 
     management_input = sys.argv[2] 
     folder_path = sys.argv[3] 
-    num_cores = sys.argv[4]
+    num_cores = int(sys.argv[4])
     print("Processing data for management scenario ", management_input)
     print("Case study ", case_study_input)
+    print("Number of cores to be used ", num_cores)
     # check that the argument is valid
     valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL"]
     valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All"]
