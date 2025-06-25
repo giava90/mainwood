@@ -183,12 +183,11 @@ if __name__ == "__main__":
     # Select what to run
     case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study == "All" else [case_study]
     scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_scenario == "ALL" else [management_scenario]
-    print(case_studies_to_run)
-    print(scenarios_to_run)
+
     for cs in case_studies_to_run:
         for ms in scenarios_to_run:
-            input_folder_path = f"/cluster/work/climate/amauri/{case_study}/Results/mgmt_{management_scenario}/dead.trees/"
-            output_folder_path = f"/cluster/scratch/giacomov/mainwood/{case_study}/"
+            input_folder_path = f"/cluster/work/climate/amauri/{cs}/Results/mgmt_{ms}/dead.trees/"
+            output_folder_path = f"/cluster/scratch/giacomov/mainwood/{cs}/"
             failed = process_combination(
                 cs, ms, 
                 input_folder_path, 
