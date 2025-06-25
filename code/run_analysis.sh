@@ -7,9 +7,9 @@ module load stack/2024-06 python/3.12.8  # Load Python 3.12.8 from the specified
 # Define the number of cores to use
 n_cores=1  # Adjust this value as needed
 mem_per_cpu=20000 #megabytes per cpu
-case_study='entlebuch'
-management_scenario='bio'
-folder_data='../data'
+case_study='All'
+management_scenario='ALL'
+folder_data='/cluster/scratch/giacomov/mainwood/'
 # Submit the job to SLURM using sbatch
 # -c specifies the number of CPU cores
 # --wrap allows executing a command within sbatch
