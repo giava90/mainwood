@@ -382,7 +382,7 @@ def plot_biomass(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=Tr
     if show:
         plt.show()
     if save:
-        plt.savefig("../figures/biomass_plot.png", dpi=300, bbox_inches='tight')
+        plt.savefig("../figures/biomass_plot_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
 
 def plot_biomass_with_rolling_stats(summaries, show=False, save=True):
     """
@@ -461,7 +461,7 @@ def plot_biomass_with_rolling_stats(summaries, show=False, save=True):
     if show:
         plt.show()
     if save:
-        plt.savefig("../figures/biomass_plot_with_rolling_time_window.png", dpi=300, bbox_inches='tight')
+        plt.savefig("../figures/biomass_plot_with_rolling_time_window_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
 
 def plot_biomass_for_sawmill_categories(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=True):
     """
@@ -537,7 +537,7 @@ def plot_biomass_for_sawmill_categories(df_soft_1, df_hard_1, df_soft_7, df_hard
     if show:
         plt.show()
     if save:
-        plt.savefig("../figures/biomass_sawmill_categories.png", dpi=300, bbox_inches='tight')
+        plt.savefig("../figures/biomass_sawmill_categories_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
 
 def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass_hard_1,
                                                    df_biomass_soft_7, df_biomass_hard_7,
@@ -645,7 +645,7 @@ def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass
     if show:
         plt.show()
     if save:
-        plt.savefig("../figures/biomass_normalized_for_sawmills_by_category.png", dpi=300, bbox_inches='tight')
+        plt.savefig("../figures/biomass_normalized_for_sawmills_by_category_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
 
 def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_hard_1, df_soft_7, df_hard_7, areas, show=False, save=True):
     """
@@ -786,12 +786,13 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     if show:
         plt.show()
     if save:
-        plt.savefig("../figures/biomass_for_sawmills_by_category_and_altitude.png", dpi=300, bbox_inches='tight')
+        plt.savefig("../figures/biomass_for_sawmills_by_category_and_altitude_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
 
 
 if __name__ == "__main__":
 
     # --- Read information from key arguments ---
+    global case_study, management
     case_study = sys.argv[1] if len(sys.argv) > 1 else "entlebuch"
     management = sys.argv[2] if len(sys.argv) > 2 else "BIO"
     folder_path = sys.argv[3] if len(sys.argv) > 3 else "../data"
