@@ -49,15 +49,15 @@ def load_data(folder_path, management_scenario):
                           or an empty DataFrame if no valid files are found.
     """
     files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
-    np.random.seed(42)
+    # np.random.seed(42)
+    # sample_size = max(1, int(0.1 * len(files)))  # ensure at least 1 file
+    # sampled_files = list(np.random.choice(files, size=sample_size, replace=False))
 
     if "assortments_summaries.csv" in files:
         files.remove("assortments_summaries.csv")
 
     df = pd.DataFrame()
     for file in files:
-        if np.random.sample()>=0.1:
-            continue
         filename = os.path.join(folder_path, file)
         if os.path.isfile(filename):
             try:
