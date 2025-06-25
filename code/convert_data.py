@@ -169,7 +169,7 @@ if __name__ == "__main__":
     print("Using a sample ", use_sample)
     print("Save intermediate files as zip ", save_intermediate)
     # check that the argument is valid
-    valid_management_scenarios = ["BAU", "BIO", "WOOD", "HYBRID", "ALL"]
+    valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL"]
     valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All"]
     if case_study not in valid_case_studies:
         raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
