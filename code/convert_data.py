@@ -106,20 +106,62 @@ def compress_file(stand, simtype, output_folder_path, management_scenario):
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         zipf.write(file_path, os.path.basename(file_path))
     os.remove(file_path)
+
+def process_combination(cs, ms, input_folder_path, output_folder_path, num_cores, use_sample, save_intermediate, start):
+    """
+    Processes files for a given case study and management scenario combination.
+
+    Parameters
+    ----------
+    cs : str
+        Case study name.
+    ms : str
+        Management scenario name.
+    input_folder_path : str
+        path for folder inputs 
+    output_folder_path : str
+        path for folder outputs 
+    num_cores : int
+        Number of CPU cores to use during processing.
+    use_sample : bool
+        Whether to process only a sample of the files.
+    save_intermediate : bool
+        Whether to save intermediate processing results.
+    start : datetime
+        Timestamp marking the start of the processing (used for timing output).
+
+    Returns
+    -------
+    List[str]
+        A list of file names that failed to process.
+    """
     
+    files = get_files_in_folder(input_folder_path)
+    print("We have", len(files), "files to be processed (if sample == True, then only 40)")
+    
+    failed_files = process_files(
+        files,
+        input_folder_path,
+        output_folder_path,
+        ms,
+        num_cores=num_cores,
+        sample=use_sample,
+        save_intermediate=save_intermediate
+    )
+    print("The following files were not processed correctly...")
+    for f in failed_files:
+        print(f)
+    print("Time taken:", dt.datetime.now() - start)
+
+
 if __name__ == "__main__":
-    start = dt.datetime.now()
+    start_time = dt.datetime.now()
     # Parse arguments
     management_scenario = sys.argv[1]
     use_sample = sys.argv[2]
     num_cores = int(sys.argv[3])
     save_intermediate = sys.argv[4]
     case_study = sys.argv[5]
-    # input_folder_path = f"/cluster/work/climate/amauri/{case_study}/Results/mgmt_{management_scenario}/dead.trees/"
-    # output_folder_path = f"/cluster/scratch/giacomov/mainwood/{case_study}/"
-    # input_folder_path = f"../data/{case_study}/inputs/{management_scenario}/dead.trees/"
-    input_folder_path = f"../../entlebuch_minimal_euler/data/entlebuch/d.trees4giacomo/dead.trees.{management_scenario}/"
-    output_folder_path = f"../data/{case_study}/"
     # folder_path = sys.argv[7]
     print("Processing data for management scenario ", management_scenario)
     print("Case study ", case_study)
@@ -127,8 +169,8 @@ if __name__ == "__main__":
     print("Using a sample ", use_sample)
     print("Save intermediate files as zip ", save_intermediate)
     # check that the argument is valid
-    valid_management_scenarios = ["BAU", "bio", "WOOD", "HYBRID"]
-    valid_case_studies = ["Entlebuch", "Vaud", "Surselva"]
+    valid_management_scenarios = ["BAU", "BIO", "WOOD", "HYBRID", "ALL"]
+    valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All"]
     if case_study not in valid_case_studies:
         raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
     if management_scenario not in valid_management_scenarios:
@@ -137,16 +179,21 @@ if __name__ == "__main__":
         raise ValueError("Invalid argument for use_sample. Please provide True or False.")
     if use_sample == "True":
         print("Using sample data...")
-    files = get_files_in_folder(input_folder_path)
-    print("We have ",len(files), "files to be processed (if sample == True, then only 40)")
-    failed_files = process_files(files, 
-                                 input_folder_path,
-                                 output_folder_path,
-                                 management_scenario, 
-                                 num_cores=num_cores, 
-                                 sample = use_sample, 
-                                 save_intermediate = save_intermediate)
-    print("The following files where not processed correctly...")
-    for f in failed_files:
-        print(f)
-    print("Time taken:", dt.datetime.now() -start)
+    
+    # Select what to run
+    case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study == "All" else [case_study]
+    scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "All"] if management_scenario == "All" else [management_scenario]
+
+    for cs in case_studies_to_run:
+        for ms in scenarios_to_run:
+            input_folder_path = f"/cluster/work/climate/amauri/{case_study}/Results/mgmt_{management_scenario}/dead.trees/"
+            output_folder_path = f"/cluster/scratch/giacomov/mainwood/{case_study}/"
+            failed = process_combination(
+                cs, ms, 
+                input_folder_path, 
+                output_folder_path,
+                num_cores=num_cores,
+                use_sample=use_sample,
+                save_intermediate=save_intermediate,
+                start=start_time
+            )
