@@ -14,4 +14,4 @@ folder_data='../data'
 # -c specifies the number of CPU cores
 # --wrap allows executing a command within sbatch
 # --mem-per-cpu specifies the memory per cpu in megabytes
-sbatch -c $n_cores --mem-per-cpu=$mem_per_cpu --wrap="python summarize_and_create_plots.py $case_study $management_scenario $folder_data"
+sbatch -c $n_cores --mem-per-cpu=$mem_per_cpu --wrap="python summarize_and_create_plots.py $case_study $management_scenario $folder_data $n_cores"

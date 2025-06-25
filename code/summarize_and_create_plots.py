@@ -6,6 +6,7 @@ import numpy as np
 import os
 import sys
 import datetime as dt
+from multiprocessing import Pool
 
 
 from matplotlib.lines import Line2D
@@ -790,10 +791,9 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     if save:
         plt.savefig("../figures/biomass_for_sawmills_by_category_and_altitude_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
 
-def process_combination(cs, ms):
+def process_combination(args):
     global case_study, management
-    case_study = cs
-    management = ms
+    case_study, management, start_time = args
     # --- Configuration ---
     folder_path = f"{folder_path}/{case_study}/outputs/{management}/"
     stand_data_path = f"../data/{case_study}/stand.details.csv"
@@ -891,6 +891,7 @@ def process_combination(cs, ms):
     print("Plotting normalized biomass for sawmill categories and altitudes...")
     plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), areas, show=show, save=save)
     print("All plots generated successfully.")
+    print("Time taken:", dt.datetime.now() - start_time)
 
 
 if __name__ == "__main__":
@@ -899,6 +900,7 @@ if __name__ == "__main__":
     case_study_input = sys.argv[1] 
     management_input = sys.argv[2] 
     folder_path = sys.argv[3] 
+    num_cores = sys.argv[4]
     print("Processing data for management scenario ", management_input)
     print("Case study ", case_study_input)
     # check that the argument is valid
@@ -912,8 +914,8 @@ if __name__ == "__main__":
      # Select what to run
     case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study_input == "All" else [case_study_input]
     scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_input == "ALL" else [management_input]
+    combinations = [(cs, ms, start_time) for cs in case_studies_to_run for ms in scenarios_to_run]
 
-    for cs in case_studies_to_run:
-        for ms in scenarios_to_run:
-            failed = process_combination(cs, ms)
-            print("Time taken:", dt.datetime.now() - start_time)
+    with Pool(processes=num_cores) as pool:
+        results = pool.map(process_combination, combinations)
+            
