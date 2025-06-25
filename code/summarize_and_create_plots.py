@@ -5,6 +5,8 @@ import seaborn as sns
 import numpy as np
 import os
 import sys
+import datetime as dt
+
 
 from matplotlib.lines import Line2D
 
@@ -788,15 +790,10 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     if save:
         plt.savefig("../figures/biomass_for_sawmills_by_category_and_altitude_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
 
-
-if __name__ == "__main__":
-
-    # --- Read information from key arguments ---
+def process_combination(cs, ms):
     global case_study, management
-    case_study = sys.argv[1] if len(sys.argv) > 1 else "entlebuch"
-    management = sys.argv[2] if len(sys.argv) > 2 else "BIO"
-    folder_path = sys.argv[3] if len(sys.argv) > 3 else "../data"
-
+    case_study = cs
+    management = ms
     # --- Configuration ---
     folder_path = f"{folder_path}/{case_study}/outputs/{management}/"
     stand_data_path = f"../data/{case_study}/stand.details.csv"
@@ -894,3 +891,29 @@ if __name__ == "__main__":
     print("Plotting normalized biomass for sawmill categories and altitudes...")
     plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), areas, show=show, save=save)
     print("All plots generated successfully.")
+
+
+if __name__ == "__main__":
+    start_time = dt.datetime.now()
+    # --- Read information from key arguments ---
+    case_study_input = sys.argv[1] 
+    management_input = sys.argv[2] 
+    folder_path = sys.argv[3] 
+    print("Processing data for management scenario ", management_input)
+    print("Case study ", case_study_input)
+    # check that the argument is valid
+    valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL"]
+    valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All"]
+    if case_study_input not in valid_case_studies:
+        raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
+    if management_input not in valid_management_scenarios:
+        raise ValueError(f"Invalid management scenario. Please provide a valid management scenario {valid_management_scenarios}.")
+    
+     # Select what to run
+    case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study_input == "All" else [case_study_input]
+    scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_input == "ALL" else [management_input]
+
+    for cs in case_studies_to_run:
+        for ms in scenarios_to_run:
+            failed = process_combination(cs, ms)
+            print("Time taken:", dt.datetime.now() - start_time)
