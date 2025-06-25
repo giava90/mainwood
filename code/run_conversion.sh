@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # python convert_data.py WOOD True 3 False Entlebuch
-# python convert_data.py All True 1 False All
+# python convert_data.py ALL True 1 False All
 # Load necessary modules
 module load stack/2024-06 python/3.12.8  # Load Python 3.12.8 from the specified stack
 module load stack/2024-06 openjdk/21.0.3_9  # Load OpenJDK 21.0.3_9 from the specified stack
