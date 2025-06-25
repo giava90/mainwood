@@ -182,7 +182,7 @@ if __name__ == "__main__":
     
     # Select what to run
     case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study == "All" else [case_study]
-    scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "All"] if management_scenario == "All" else [management_scenario]
+    scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_scenario == "ALL" else [management_scenario]
 
     for cs in case_studies_to_run:
         for ms in scenarios_to_run:

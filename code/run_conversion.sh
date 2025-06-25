@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # python convert_data.py WOOD True 3 False Entlebuch
+# python convert_data.py All True 1 False All
 # Load necessary modules
 module load stack/2024-06 python/3.12.8  # Load Python 3.12.8 from the specified stack
 module load stack/2024-06 openjdk/21.0.3_9  # Load OpenJDK 21.0.3_9 from the specified stack
-
 # Define the number of cores to use
 n_cores=5  # Adjust this value as needed
 mem_per_cpu=3000 #megabytes per cpu
