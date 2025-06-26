@@ -7,6 +7,7 @@ import os
 import sys
 import datetime as dt
 from multiprocessing import Pool
+from collections import defaultdict
 
 import pdb
 
@@ -83,7 +84,7 @@ def load_data(folder_path, management_scenario):
                 print(f"Warning: Error reading file {file}: {e}")
     return df
 
-def load_data_parallel(folder_path, management_scenario, num_cores=1):
+def load_data_parallel(folder_path, management_scenario, sample=False, num_cores=1):
     """
     Efficiently reads and combines data from CSV files in parallel using multiprocessing.
 
@@ -95,6 +96,7 @@ def load_data_parallel(folder_path, management_scenario, num_cores=1):
     Args:
         folder_path (str): The path to the folder containing the CSV files.
         management_scenario (str): A string used to extract metadata from filenames.
+        sample (int): The number of files to sample at random to test. Default is False, meaning that all files are parsed
         num_cores (int): The number of cores used for the multiprocessing. Default is 1.
 
     Returns:
@@ -103,14 +105,25 @@ def load_data_parallel(folder_path, management_scenario, num_cores=1):
     """
     files = [f for f in os.listdir(folder_path)
              if os.path.isfile(os.path.join(folder_path, f)) and f != "assortments_summaries.csv"]
+    if sample:
+        np.random.seed(42)
+        sample_size = min(sample, len(files))
+        files = np.random.choice(files, size=sample_size, replace=False)
 
     args = [(folder_path, f, management_scenario) for f in files]
 
     with Pool(num_cores) as pool:
-        data_frames = pool.map(process_file, args)
+        results = pool.map(process_file, args)
 
-    data_frames = [df for df in data_frames if df is not None]
-    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
+    results = [res for res in results if res[0] is not None]
+    # Separate data and count occurrences
+    data_frames = []
+    pair_counts = defaultdict(int)
+
+    for df, stand, simtype in results:
+        data_frames.append(df)
+        pair_counts[(stand, simtype)] += 1
+    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame(), pair_counts
 
 def process_file(file_path_and_name):
     """
@@ -144,18 +157,21 @@ def process_file(file_path_and_name):
         df = df[1:]
         df["simtype"] = simtype
         df["stand"] = stand
-        return df
+        return df, stand, simtype
     except Exception as e:
         print(f"Error processing {file_name}: {e}")
-        return None
+        return None, None, None
 
-def preprocess_data(df):
+def preprocess_data(df, stand_simtype_count = None):
     """
     Preprocesses the combined DataFrame by removing unnecessary columns,
     handling missing values, renaming columns with umlauts, and casting volume columns to float.
+    Also, if stand_simtype_count is not None, we divide each (stand,simtype) pair by the count observed.
+    This is to correct for the fact that if a pair as a combination larger than it means, that we runned multiple simulation for it
 
     Args:
         df (pandas.DataFrame): The DataFrame to preprocess.
+        stand_simtype_count(defaultdict): Defaultdictionary where keys are stand,simtype) pair and values their observed occurrences
 
     Returns:
         pandas.DataFrame: The preprocessed DataFrame.
@@ -192,6 +208,16 @@ def preprocess_data(df):
             summaries.loc[:, col] = pd.to_numeric(summaries[col], errors='coerce') # Handle potential conversion errors
         else:
             print(f"Warning: Column '{col}' not found, skipping float conversion.")
+    
+    if stand_simtype_count is not None:
+        # Create a column with the count for each (stand, simtype) pair
+        summaries['pair_count'] = summaries.apply(lambda row: stand_simtype_count[(row['stand'], row['simtype'])], axis=1)
+
+        # Divide all numeric columns (except for stand, simtype, pair_count) by the pair count
+        summaries[cols_to_float] = summaries[cols_to_float].div(summaries['pair_count'], axis=0)
+
+        # Drop the helper column
+        summaries.drop(columns='pair_count', inplace=True)
 
     return summaries
 
@@ -711,7 +737,7 @@ def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass
     if show:
         plt.show()
     if save:
-        plt.savefig("../figures/biomass_normalized_for_sawmills_by_category_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
+        plt.savefig("../figures/biomass_normalized_for_sawmills_category_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
 
 def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_hard_1, df_soft_7, df_hard_7, areas, show=False, save=True):
     """
@@ -728,23 +754,33 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
         show (bool, optional): Whether to show the plot. Defaults to False.
         save (bool, optional): Whether to save the plot. Defaults to True.
     """
+    # Get all expected combinations
+    all_groups = df_hard_7['Gruppierungsmerkmal'].unique()
+    above1000m_values = [1.0, 0.0]
+
+    # Create full index
+    full_index = pd.MultiIndex.from_product([all_groups, above1000m_values], names=['Gruppierungsmerkmal', 'Above1000m'])
 
     df_biomass_soft_1 = df_soft_1.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen IR [m3]_for_sawmills", "Volumen IR [m3]_not_for_sawmills"]].sum()
+    df_biomass_soft_1 = df_biomass_soft_1.reindex(full_index, fill_value=0)
     df_biomass_soft_1 = df_biomass_soft_1.fillna(0)
     df_biomass_soft_1 = df_biomass_soft_1.unstack()
-    y_soft_1 = df_biomass_soft_1.values
+
     df_biomass_hard_1 = df_hard_1.groupby(['Gruppierungsmerkmal', "Above1000m" ])[["Volumen IR [m3]_for_sawmills", "Volumen IR [m3]_not_for_sawmills"]].sum()
+    df_biomass_hard_1 = df_biomass_hard_1.reindex(full_index, fill_value=0)
     df_biomass_hard_1 = df_biomass_hard_1.fillna(0)
     df_biomass_hard_1 = df_biomass_hard_1.unstack()
-    y_hard_1 = df_biomass_hard_1.values
+
     df_biomass_soft_7 = df_soft_7.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen IR [m3]_for_sawmills", "Volumen IR [m3]_not_for_sawmills"]].sum()
+    df_biomass_soft_7 = df_biomass_soft_7.reindex(full_index, fill_value=0)
     df_biomass_soft_7 = df_biomass_soft_7.fillna(0)
     df_biomass_soft_7 = df_biomass_soft_7.unstack()
-    y_soft_7 = df_biomass_soft_7.values
+
     df_biomass_hard_7 = df_hard_7.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen IR [m3]_for_sawmills", "Volumen IR [m3]_not_for_sawmills"]].sum()
+    df_biomass_hard_7 = df_biomass_hard_7.reindex(full_index, fill_value=0)
     df_biomass_hard_7 = df_biomass_hard_7.fillna(0)
     df_biomass_hard_7= df_biomass_hard_7.unstack()
-    y_hard_7 =df_biomass_hard_7.values
+
 
     # normalizing the volumen by total area in ha
     norm_factor = np.array([areas[0], areas[1], areas[0], areas[1]]) / 10**4
@@ -856,7 +892,7 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
 
 def process_combination(args):
     global case_study, management
-    case_study, management, folder_path, start_time, num_cores = args
+    case_study, management, folder_path, start_time, sample, num_cores = args
     # --- Configuration ---
     folder_path = f"{folder_path}/{case_study}/outputs/{management}/"
     stand_data_path = f"../data/{case_study}/stand.details.csv"
@@ -872,16 +908,18 @@ def process_combination(args):
 
     # --- Verbose ---
     show = False
+    # --- Figures --- 
     save = True
-
     # --- Data Loading and Preprocessing ---
     # print("Loading data...")
     # df = load_data(folder_path, management)
+    print("Processing case study ", management, " in ", case_study )
     print("Loading data in parallel...")
-    df = load_data_parallel(folder_path, management, num_cores)
+    stand_simtype_count = None
+    df, stand_simtype_count = load_data_parallel(folder_path, management, sample, num_cores)
 
     print("Preprocessing main data...")
-    summaries = preprocess_data(df)
+    summaries = preprocess_data(df, stand_simtype_count)
 
     print("Loading stand data...")
     stand_data = pd.read_csv(stand_data_path)
@@ -921,7 +959,6 @@ def process_combination(args):
     df_hard_1 = summaries[(summaries["simtype"] == "1") & (summaries["is_hard"] == True)].copy()
     df_soft_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_soft"] == True)].copy()
     df_hard_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_hard"] == True)].copy()
-
     # --- Plotting ---
     print("Plotting total biomass...")
     plot_biomass(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), show=show, save=save)
@@ -966,9 +1003,11 @@ if __name__ == "__main__":
     management_input = sys.argv[2] 
     folder_path = sys.argv[3] 
     num_cores = int(sys.argv[4])
+    sample_size = sys.argv[5]
     print("Processing data for management scenario ", management_input)
     print("Case study ", case_study_input)
     print("Number of cores to be used ", num_cores)
+    print("The sample size is ", sample_size)
     # check that the argument is valid
     valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL"]
     valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All"]
@@ -976,11 +1015,18 @@ if __name__ == "__main__":
         raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
     if management_input not in valid_management_scenarios:
         raise ValueError(f"Invalid management scenario. Please provide a valid management scenario {valid_management_scenarios}.")
-    
+    if sample_size != 'False':
+        try:
+            sample_size = int(sample_size)
+        except ValueError:
+            raise ValueError("Invalid argument for sample_size. Please provide 'False' or an integer value.")
+    else:
+        sample_size = False
+
      # Select what to run
     case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study_input == "All" else [case_study_input]
     scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_input == "ALL" else [management_input]
-    combinations = [(cs, ms, folder_path, start_time, num_cores) for cs in case_studies_to_run for ms in scenarios_to_run]
+    combinations = [(cs, ms, folder_path, start_time, sample_size, num_cores) for cs in case_studies_to_run for ms in scenarios_to_run]
 
     for cb in combinations:
         results = process_combination(cb)

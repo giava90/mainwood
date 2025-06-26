@@ -3,7 +3,7 @@
 # Load necessary modules
 module load stack/2024-06 python/3.12.8  # Load Python 3.12.8 from the specified stack
 
-# python summarize_and_create_plots.py All ALL /cluster/scratch/giacomov/mainwood/ 1
+# python summarize_and_create_plots.py All ALL /cluster/scratch/giacomov/mainwood/ 1 100
 # Define the number of cores to use
 n_cores=1  # Adjust this value as needed
 mem_per_cpu=20000 #megabytes per cpu
