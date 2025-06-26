@@ -83,9 +83,52 @@ def load_data(folder_path, management_scenario):
                 print(f"Warning: Error reading file {file}: {e}")
     return df
 
+def load_data_parallel(folder_path, management_scenario, num_cores=1):
+    """
+    Efficiently reads and combines data from CSV files in parallel using multiprocessing.
+
+    This function utilizes all available CPU cores to speed up the reading and processing
+    of CSV files. Each file is processed in parallel, and only valid DataFrames are collected.
+    Files without the '#Gruppierungsmerkmal' marker or that raise errors are skipped.
+    Files named 'assortments_summaries.csv' are also excluded.
+
+    Args:
+        folder_path (str): The path to the folder containing the CSV files.
+        management_scenario (str): A string used to extract metadata from filenames.
+        num_cores (int): The number of cores used for the multiprocessing. Default is 1.
+
+    Returns:
+        pandas.DataFrame: A combined DataFrame containing processed data from all valid CSV files,
+                          or an empty DataFrame if no valid files are found.
+    """
+    files = [f for f in os.listdir(folder_path)
+             if os.path.isfile(os.path.join(folder_path, f)) and f != "assortments_summaries.csv"]
+
+    args = [(folder_path, f, management_scenario) for f in files]
+
+    with Pool(num_cores) as pool:
+        data_frames = pool.map(process_file, args)
+
+    data_frames = [df for df in data_frames if df is not None]
+    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
+
 def process_file(file_path_and_name):
     """
+    Processes a single CSV file to extract and transform relevant data.
 
+    This function reads a CSV file, locates the row with the '#Gruppierungsmerkmal' marker
+    to reset the header, and appends additional metadata (stand and simtype) based on the
+    filename and management scenario. It returns the processed DataFrame or None if the
+    file is invalid or an error occurs.
+
+    Args:
+        file_path_and_name (tuple): A tuple containing:
+            - file_path (str): The folder path where the file is located.
+            - file_name (str): The name of the file to process.
+            - management_scenario (str): A string used to extract metadata from the filename.
+
+    Returns:
+        pandas.DataFrame or None: A processed DataFrame if successful, or None if the file is invalid.
     """
     file_path, file_name, management_scenario = file_path_and_name
     try:
@@ -105,18 +148,6 @@ def process_file(file_path_and_name):
     except Exception as e:
         print(f"Error processing {file_name}: {e}")
         return None
-
-def load_data_parallel(folder_path, management_scenario, num_cores):
-    files = [f for f in os.listdir(folder_path)
-             if os.path.isfile(os.path.join(folder_path, f)) and f != "assortments_summaries.csv"]
-
-    args = [(folder_path, f, management_scenario) for f in files]
-
-    with Pool(num_cores) as pool:
-        data_frames = pool.map(process_file, args)
-
-    data_frames = [df for df in data_frames if df is not None]
-    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
 
 def preprocess_data(df):
     """
@@ -951,8 +982,6 @@ if __name__ == "__main__":
     scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_input == "ALL" else [management_input]
     combinations = [(cs, ms, folder_path, start_time, num_cores) for cs in case_studies_to_run for ms in scenarios_to_run]
 
-    # with Pool(processes=num_cores) as pool:
-    #     results = pool.map(process_combination, combinations)
     for cb in combinations:
         results = process_combination(cb)
             
