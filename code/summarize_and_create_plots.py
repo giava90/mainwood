@@ -8,6 +8,8 @@ import sys
 import datetime as dt
 from multiprocessing import Pool
 
+import pdb
+
 
 from matplotlib.lines import Line2D
 
@@ -34,8 +36,6 @@ def parse_filename(filename: str, scenario: str) -> tuple:
         return stand, simtype
     else:
         species = parts[-1] if "planted" in parts else None
-        print(species)
-        print(parts)
         if species is None:
             raise ValueError("Expected 'planted' and species information for non-BIO scenario.")
         return stand, simtype
@@ -52,9 +52,6 @@ def load_data(folder_path, management_scenario):
                           or an empty DataFrame if no valid files are found.
     """
     files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
-    # np.random.seed(42)
-    # sample_size = max(1, int(0.1 * len(files)))  # ensure at least 1 file
-    # sampled_files = list(np.random.choice(files, size=sample_size, replace=False))
 
     if "assortments_summaries.csv" in files:
         files.remove("assortments_summaries.csv")
@@ -66,7 +63,7 @@ def load_data(folder_path, management_scenario):
             try:
                 stand, simtype = parse_filename(file, management_scenario)
                 # Read the CSV file
-                data = pd.read_csv(filename, sep=";")
+                data = pd.read_csv(filename, sep=";", low_memory=False)
 
                 # Identify the row with '#Gruppierungsmerkmal' and set it as the new header
                 cut_point = data[data["#ID"] == "#Gruppierungsmerkmal"]
@@ -85,6 +82,41 @@ def load_data(folder_path, management_scenario):
             except Exception as e:
                 print(f"Warning: Error reading file {file}: {e}")
     return df
+
+def process_file(file_path_and_name):
+    """
+
+    """
+    file_path, file_name, management_scenario = file_path_and_name
+    try:
+        stand, simtype = parse_filename(file_name, management_scenario)
+        df = pd.read_csv(os.path.join(file_path, file_name), sep=";", low_memory=False)
+        cut_point = df[df["#ID"] == "#Gruppierungsmerkmal"]
+        if cut_point.empty:
+            return None
+
+        cut_idx = cut_point.index[0]
+        df = df[cut_idx:]
+        df.columns = df.iloc[0]
+        df = df[1:]
+        df["simtype"] = simtype
+        df["stand"] = stand
+        return df
+    except Exception as e:
+        print(f"Error processing {file_name}: {e}")
+        return None
+
+def load_data_parallel(folder_path, management_scenario, num_cores):
+    files = [f for f in os.listdir(folder_path)
+             if os.path.isfile(os.path.join(folder_path, f)) and f != "assortments_summaries.csv"]
+
+    args = [(folder_path, f, management_scenario) for f in files]
+
+    with Pool(num_cores) as pool:
+        data_frames = pool.map(process_file, args)
+
+    data_frames = [df for df in data_frames if df is not None]
+    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
 
 def preprocess_data(df):
     """
@@ -205,7 +237,7 @@ def load_quality_data(file_path):
         # Rename the columns
         quality_df.columns = ["Baumart", "Wertklasse", "Stammholz-Faktor", "A", "B", "C", "D", "Endnutzung"]
         # When the Baumart is NaN, fill with the value from the previous row
-        quality_df["Baumart"] = quality_df["Baumart"].fillna(method='ffill')
+        quality_df["Baumart"] = quality_df["Baumart"].ffill()
         # Fill remaining NaN values with 0
         quality_df = quality_df.fillna(0)
         # Keep only the rows that have Wertklasse == 2
@@ -793,7 +825,7 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
 
 def process_combination(args):
     global case_study, management
-    case_study, management, folder_path, start_time = args
+    case_study, management, folder_path, start_time, num_cores = args
     # --- Configuration ---
     folder_path = f"{folder_path}/{case_study}/outputs/{management}/"
     stand_data_path = f"../data/{case_study}/stand.details.csv"
@@ -812,8 +844,10 @@ def process_combination(args):
     save = True
 
     # --- Data Loading and Preprocessing ---
-    print("Loading data...")
-    df = load_data(folder_path, management)
+    # print("Loading data...")
+    # df = load_data(folder_path, management)
+    print("Loading data in parallel...")
+    df = load_data_parallel(folder_path, management, num_cores)
 
     print("Preprocessing main data...")
     summaries = preprocess_data(df)
@@ -915,8 +949,10 @@ if __name__ == "__main__":
      # Select what to run
     case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study_input == "All" else [case_study_input]
     scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_input == "ALL" else [management_input]
-    combinations = [(cs, ms, folder_path, start_time) for cs in case_studies_to_run for ms in scenarios_to_run]
+    combinations = [(cs, ms, folder_path, start_time, num_cores) for cs in case_studies_to_run for ms in scenarios_to_run]
 
-    with Pool(processes=num_cores) as pool:
-        results = pool.map(process_combination, combinations)
+    # with Pool(processes=num_cores) as pool:
+    #     results = pool.map(process_combination, combinations)
+    for cb in combinations:
+        results = process_combination(cb)
             
