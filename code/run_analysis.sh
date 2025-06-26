@@ -11,8 +11,9 @@ case_study='All'
 management_scenario='ALL'
 folder_data='/cluster/scratch/giacomov/mainwood/'
 walltime='8:00:00'
+use_sample=100 # 'False' or an integer value
 # Submit the job to SLURM using sbatch
 # -c specifies the number of CPU cores
 # --wrap allows executing a command within sbatch
 # --mem-per-cpu specifies the memory per cpu in megabytes
-sbatch -c $n_cores --time=$walltime --mem-per-cpu=$mem_per_cpu --wrap="python summarize_and_create_plots.py $case_study $management_scenario $folder_data $n_cores"
+sbatch -c $n_cores --time=$walltime --mem-per-cpu=$mem_per_cpu --wrap="python summarize_and_create_plots.py $case_study $management_scenario $folder_data $n_cores $use_sample"
