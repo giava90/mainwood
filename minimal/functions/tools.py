@@ -114,7 +114,7 @@ def output_input_converter(data_out_ForClim, dead_cohorts = False, only_harveste
         trees_number = "dtrees"
         if only_harvested == True: # we only keep the harvested trees
             data_out_ForClim = data_out_ForClim[data_out_ForClim['type'] == 2]
-    columns = ['year', 'height', 'diameter', 'speciesid', 'cohortID', trees_number, 'run']
+    columns = ['year', 'height', 'diameter', 'speciesid', trees_number, 'run']
     data_out_ForClim_as_in_SorSim = data_out_ForClim[columns].copy()
     del data_out_ForClim
     # we import the classification of trees from the ForClim tool and map the species names to the Baumart-Code of the input data for SorClim
