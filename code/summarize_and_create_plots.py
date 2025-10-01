@@ -149,8 +149,7 @@ def process_file(file_path_and_name):
         df = pd.read_csv(os.path.join(file_path, file_name), sep=";", low_memory=False)
         cut_point = df[df["#ID"] == "#Gruppierungsmerkmal"]
         if cut_point.empty:
-            return None
-
+            return None, None, None
         cut_idx = cut_point.index[0]
         df = df[cut_idx:]
         df.columns = df.iloc[0]
