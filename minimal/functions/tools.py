@@ -114,7 +114,7 @@ def output_input_converter(data_out_ForClim, dead_cohorts = False, only_harveste
         trees_number = "dtrees"
         if only_harvested == True: # we only keep the harvested trees
             data_out_ForClim = data_out_ForClim[data_out_ForClim['type'] == 2]
-    columns = ['id', 'year', 'height', 'diameter', 'species', 'speciesid', 'cohortID', trees_number, 'run']
+    columns = ['year', 'height', 'diameter', 'speciesid', 'cohortID', trees_number, 'run']
     data_out_ForClim_as_in_SorSim = data_out_ForClim[columns].copy()
     del data_out_ForClim
     # we import the classification of trees from the ForClim tool and map the species names to the Baumart-Code of the input data for SorClim
@@ -135,7 +135,7 @@ def output_input_converter(data_out_ForClim, dead_cohorts = False, only_harveste
     # we now duplicate rows given the number of trees in the column trees
     data_out_ForClim_as_in_SorSim = data_out_ForClim_as_in_SorSim.loc[data_out_ForClim_as_in_SorSim.index.repeat(data_out_ForClim_as_in_SorSim[trees_number])]
     # we drop the columns that are not needed
-    data_out_ForClim_as_in_SorSim = data_out_ForClim_as_in_SorSim.drop(['id', 'cohortID', 'speciesid', 'species', trees_number, 'FullLatinName'], axis=1)
+    data_out_ForClim_as_in_SorSim = data_out_ForClim_as_in_SorSim.drop(['speciesid', trees_number, 'FullLatinName'], axis=1)
     # we reorder the columns
     data_out_ForClim_as_in_SorSim = data_out_ForClim_as_in_SorSim[['Baumart', 'Baumart-Code', 'Beschrieb', 'year', 'diameter', 'D7m', 'height']]
     # we rename the columns using the same names as in the input data for SorClim
