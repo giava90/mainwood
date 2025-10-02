@@ -247,7 +247,8 @@ def augment_with_stand_data(summaries, stand_data):
 
     # Adding area and altitude to summaries
     summaries["Above1000m"] = summaries["stand"].astype(str).map(stand_to_else_dict["Above1000m"])
-    summaries["sim_area (m2)"] = summaries["stand"].astype(str).map(stand_to_else_dict["n.patches"]) * 625
+    #summaries["sim_area (m2)"] = summaries["stand"].astype(str).map(stand_to_else_dict["n.patches"]) * 625
+    summaries["sim_area (m2)"] = 100 * 625
     summaries["area"] = summaries["stand"].astype(str).map(stand_to_else_dict["area"])
 
     return summaries
@@ -349,7 +350,7 @@ def map_species_for_quality(df, species_quality_mapping):
     df["baumart_for_quality"] = df["Baumart"].apply(lambda x: species_quality_mapping.get(x, x)) # Default to original if not found
     return df
 
-def calculate_biomass_for_sawmills(x, baumart2fraction, biomass_column="Volumen IR [m3]"):
+def calculate_biomass_for_sawmills(x, baumart2fraction, biomass_column="Volumen OR [m3]"):
     """
     Calculates the biomass fraction suitable for sawmills based on diameter class and wood quality.
 
@@ -357,7 +358,7 @@ def calculate_biomass_for_sawmills(x, baumart2fraction, biomass_column="Volumen 
         x (pandas.Series): A row of the DataFrame.
         baumart2fraction (dict): A dictionary mapping tree species to the fraction for sawmills.
         biomass_column (str, optional): The name of the column containing biomass.
-                                         Defaults to "Volumen IR [m3]".
+                                         Defaults to "Volumen OR [m3]".
 
     Returns:
         float: The biomass (from the specified column) multiplied by the fraction
@@ -370,7 +371,7 @@ def calculate_biomass_for_sawmills(x, baumart2fraction, biomass_column="Volumen 
     else:
         return 0
 
-def calculate_biomass_not_for_sawmills(x, baumart2fraction, biomass_column="Volumen IR [m3]"):
+def calculate_biomass_not_for_sawmills(x, baumart2fraction, biomass_column="Volumen OR [m3]"):
     """
     Calculates the biomass fraction not suitable for sawmills.
 
@@ -378,7 +379,7 @@ def calculate_biomass_not_for_sawmills(x, baumart2fraction, biomass_column="Volu
         x (pandas.Series): A row of the DataFrame.
         baumart2fraction (dict): A dictionary mapping tree species to the fraction for sawmills.
         biomass_column (str, optional): The name of the column containing biomass.
-                                         Defaults to "Volumen IR [m3]".
+                                         Defaults to "Volumen OR [m3]".
 
     Returns:
         float: The biomass (from the specified column) multiplied by (1 - fraction for sawmills)
@@ -444,14 +445,22 @@ def plot_biomass(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=Tr
         show (bool, optional): Whether to show the plot. Defaults to False.
         save (bool, optional): Whether to save the plot. Defaults to True.
     """
+    # in the simulations, we have 100 stands of 625 m2 each
+    # however, the actual area of the stand is different and saved in "area" column
+    # hence, we have to divide the "Volumen OR [m3]" by 100 * 625 and multiply by the actual area
+    # we have saved the simulated area in "sim_area (m2)" column
+    df_soft_1["Volumen OR [m3]"] = df_soft_1["Volumen OR [m3]"] / df_soft_1["sim_area (m2)"] * df_soft_1["area"] 
+    df_hard_1["Volumen OR [m3]"] = df_hard_1["Volumen OR [m3]"] / df_hard_1["sim_area (m2)"] * df_hard_1["area"]
+    df_soft_7["Volumen OR [m3]"] = df_soft_7["Volumen OR [m3]"] / df_soft_7["sim_area (m2)"] * df_soft_7["area"]
+    df_hard_7["Volumen OR [m3]"] = df_hard_7["Volumen OR [m3]"] / df_hard_7["sim_area (m2)"] * df_hard_7["area"] 
     plt.figure(figsize=(10, 4))
 
     plt.subplot(1, 2, 1)
     plt.ylabel('Wood (m3)')
-    plt.plot(df_soft_1.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum().index.astype(int),
-             df_soft_1.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum().values, label="softwood")
-    plt.plot(df_hard_1.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum().index.astype(int),
-             df_hard_1.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum().values, label="hardwood")
+    plt.plot(df_soft_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().index.astype(int),
+             df_soft_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().values, label="softwood")
+    plt.plot(df_hard_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().index.astype(int),
+             df_hard_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().values, label="hardwood")
     plt.xlabel('Year')
     plt.yscale('log')
     plt.xlim(2010, 2310)
@@ -459,10 +468,10 @@ def plot_biomass(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=Tr
     plt.legend()
 
     plt.subplot(1, 2, 2)
-    plt.plot(df_soft_7.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum().index.astype(int),
-             df_soft_7.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum().values, label="softwood")
-    plt.plot(df_hard_7.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum().index.astype(int),
-             df_hard_7.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum().values, label="hardwood")
+    plt.plot(df_soft_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().index.astype(int),
+             df_soft_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().values, label="softwood")
+    plt.plot(df_hard_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().index.astype(int),
+             df_hard_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().values, label="hardwood")
     plt.yscale('log')
     plt.xlim(2010, 2310)
     plt.xlabel('Year')
@@ -498,11 +507,11 @@ def plot_biomass_with_rolling_stats(summaries, show=False, save=True):
     areas = summaries.groupby(["stand", "Above1000m"])["sim_area (m2)"].mean().groupby("Above1000m").sum().to_dict()
     total_area = sum(areas.values())
 
-    # Group by 'Gruppierungsmerkmal' and sum 'Volumen IR [m3]'
-    df_biomass_soft_1 = df_soft_1.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum()
-    df_biomass_hard_1 = df_hard_1.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum()
-    df_biomass_soft_7 = df_soft_7.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum()
-    df_biomass_hard_7 = df_hard_7.groupby(['Gruppierungsmerkmal'])["Volumen IR [m3]"].sum()
+    # Group by 'Gruppierungsmerkmal' and sum 'Volumen OR [m3]'
+    df_biomass_soft_1 = df_soft_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum()
+    df_biomass_hard_1 = df_hard_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum()
+    df_biomass_soft_7 = df_soft_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum()
+    df_biomass_hard_7 = df_hard_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum()
 
     # Apply rolling mean and std
     df_biomass_soft_1_mean, df_biomass_soft_1_std = rolling_stats(df_biomass_soft_1, time_window=time_window)
@@ -568,13 +577,13 @@ def plot_biomass_for_sawmill_categories(df_soft_1, df_hard_1, df_soft_7, df_hard
         save (bool, optional): Whether to save the plot. Defaults to True.
     """
     df_biomass_soft_1 = df_soft_1.groupby(['Gruppierungsmerkmal'])[[
-        'Volumen IR [m3]_for_sawmills', 'Volumen IR [m3]_not_for_sawmills']].sum().fillna(0)
+        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
     df_biomass_hard_1 = df_hard_1.groupby(['Gruppierungsmerkmal'])[[
-        'Volumen IR [m3]_for_sawmills', 'Volumen IR [m3]_not_for_sawmills']].sum().fillna(0)
+        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
     df_biomass_soft_7 = df_soft_7.groupby(['Gruppierungsmerkmal'])[[
-        'Volumen IR [m3]_for_sawmills', 'Volumen IR [m3]_not_for_sawmills']].sum().fillna(0)
+        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
     df_biomass_hard_7 = df_hard_7.groupby(['Gruppierungsmerkmal'])[[
-        'Volumen IR [m3]_for_sawmills', 'Volumen IR [m3]_not_for_sawmills']].sum().fillna(0)
+        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
 
     y_soft_1 = df_biomass_soft_1.values
     y_hard_1 = df_biomass_hard_1.values
@@ -760,22 +769,22 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     # Create full index
     full_index = pd.MultiIndex.from_product([all_groups, above1000m_values], names=['Gruppierungsmerkmal', 'Above1000m'])
 
-    df_biomass_soft_1 = df_soft_1.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen IR [m3]_for_sawmills", "Volumen IR [m3]_not_for_sawmills"]].sum()
+    df_biomass_soft_1 = df_soft_1.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
     df_biomass_soft_1 = df_biomass_soft_1.reindex(full_index, fill_value=0)
     df_biomass_soft_1 = df_biomass_soft_1.fillna(0)
     df_biomass_soft_1 = df_biomass_soft_1.unstack()
 
-    df_biomass_hard_1 = df_hard_1.groupby(['Gruppierungsmerkmal', "Above1000m" ])[["Volumen IR [m3]_for_sawmills", "Volumen IR [m3]_not_for_sawmills"]].sum()
+    df_biomass_hard_1 = df_hard_1.groupby(['Gruppierungsmerkmal', "Above1000m" ])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
     df_biomass_hard_1 = df_biomass_hard_1.reindex(full_index, fill_value=0)
     df_biomass_hard_1 = df_biomass_hard_1.fillna(0)
     df_biomass_hard_1 = df_biomass_hard_1.unstack()
 
-    df_biomass_soft_7 = df_soft_7.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen IR [m3]_for_sawmills", "Volumen IR [m3]_not_for_sawmills"]].sum()
+    df_biomass_soft_7 = df_soft_7.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
     df_biomass_soft_7 = df_biomass_soft_7.reindex(full_index, fill_value=0)
     df_biomass_soft_7 = df_biomass_soft_7.fillna(0)
     df_biomass_soft_7 = df_biomass_soft_7.unstack()
 
-    df_biomass_hard_7 = df_hard_7.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen IR [m3]_for_sawmills", "Volumen IR [m3]_not_for_sawmills"]].sum()
+    df_biomass_hard_7 = df_hard_7.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
     df_biomass_hard_7 = df_biomass_hard_7.reindex(full_index, fill_value=0)
     df_biomass_hard_7 = df_biomass_hard_7.fillna(0)
     df_biomass_hard_7= df_biomass_hard_7.unstack()
@@ -944,10 +953,10 @@ def process_combination(args):
     # --- Calculating Biomass for Sawmill Use ---
     print("Calculating biomass fractions for sawmill use...")
     if not summaries.empty and baumart2fraction:
-        summaries["Volumen IR [m3]_for_sawmills"] = summaries.apply(
+        summaries["Volumen OR [m3]_for_sawmills"] = summaries.apply(
             lambda x: calculate_biomass_for_sawmills(x, baumart2fraction), axis=1
         )
-        summaries["Volumen IR [m3]_not_for_sawmills"] = summaries.apply(
+        summaries["Volumen OR [m3]_not_for_sawmills"] = summaries.apply(
             lambda x: calculate_biomass_not_for_sawmills(x, baumart2fraction), axis=1
         )
     else:
@@ -968,13 +977,13 @@ def process_combination(args):
         total_area = sum(areas.values())
 
         df_biomass_soft_1_grouped = df_soft_1.groupby(['Gruppierungsmerkmal'])[[
-            'Volumen IR [m3]_for_sawmills', 'Volumen IR [m3]_not_for_sawmills']].sum().fillna(0)
+            'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
         df_biomass_hard_1_grouped = df_hard_1.groupby(['Gruppierungsmerkmal'])[[
-            'Volumen IR [m3]_for_sawmills', 'Volumen IR [m3]_not_for_sawmills']].sum().fillna(0)
+            'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
         df_biomass_soft_7_grouped = df_soft_7.groupby(['Gruppierungsmerkmal'])[[
-            'Volumen IR [m3]_for_sawmills', 'Volumen IR [m3]_not_for_sawmills']].sum().fillna(0)
+            'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
         df_biomass_hard_7_grouped = df_hard_7.groupby(['Gruppierungsmerkmal'])[[
-            'Volumen IR [m3]_for_sawmills', 'Volumen IR [m3]_not_for_sawmills']].sum().fillna(0)
+            'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
 
         print("Plotting normalized biomass for sawmill categories with rolling stats...")
         plot_normalized_biomass_for_sawmill_categories(
