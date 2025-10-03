@@ -902,7 +902,7 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     if save:
         plt.savefig("../figures/biomass_for_sawmills_by_category_and_altitude_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')    
 
-def plot_percentages_of_wood_quality(df_soft, df_hard, save=True, show=False, fname = "all"):
+def plot_percentages_of_wood_quality(df_soft, df_hard, save=True, show=False, fname = "all", percent=True):
     """
     Plots a stacked bar chart of wood quality as a percentage of total wood.
 
@@ -910,6 +910,8 @@ def plot_percentages_of_wood_quality(df_soft, df_hard, save=True, show=False, fn
     df_soft (pd.DataFrame): DataFrame with years as index and wood volume and quality as columns.
     show (bool): Whether to display the plot.
     save (bool): Whether to save the plot as a PNG file.
+    fname (str): Filename prefix for saving the plot.
+    percent (bool): If True, plot percentages; if False, plot absolute values.
     """
 
     df_biomass_soft = df_soft.groupby(['Gruppierungsmerkmal'])[[
@@ -928,19 +930,26 @@ def plot_percentages_of_wood_quality(df_soft, df_hard, save=True, show=False, fn
     # change the name of the index with min and max of the grouped index
     df.index = [f"{i}-{i+9}" for i in df.index]
     # Calculate percentage of total population
-    df_percent = df.div(df.sum(axis=1), axis=0) * 100
-
+    if percent ==True:
+        df = df.div(df.sum(axis=1), axis=0) * 100
+        fname = "percent_"+fname
     # Colors for each borough
     colors = {
-        "High quality - Softwood": "#fdae61",   # orange
-        "Low quality - Softwood": "#d7191c",     # red-orange
-        "High quality - Hardwood": "#abdda4",  # green
-        "Low quality - Hardwood": "#2b83ba",      # blue
-        "": "#1a9850"  # dark green
-    }
+        "High quality - Softwood": "#ca0020",
+        "Low quality - Softwood" : "#f4a582",
+        "High quality - Hardwood": "#0571b0",
+        "Low quality - Hardwood" : "#92c5de"
+        }
+    # colors = {
+    #         "High quality - Softwood": "#fdae61",   # orange
+    #     "Low quality - Softwood": "#d7191c",     # red-orange
+    #     "High quality - Hardwood": "#abdda4",  # green
+    #     "Low quality - Hardwood": "#2b83ba",      # blue
+    #     "": "#1a9850"  # dark green#1a9641",  # dark green
+    # }
 
     # Plot
-    ax = df_percent.plot(kind="bar", stacked=True, 
+    ax = df.plot(kind="bar", stacked=True, 
                          figsize=(12, 6), 
                          color=[colors[col] for col in df.columns])
 
@@ -1063,9 +1072,12 @@ def process_combination(args):
     plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), areas, show=show, save=save)
 
     # normalized 
-    print("Plotting percentages of wood quality...")
+    print("Plotting percentages of wood quality as stacked bars...")
     plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5" )
     plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5")
+    print("Plotting total of wood quality as stacked bars...")
+    plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5", percent=False)
+    plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5", percent=False)
     print("All plots generated successfully.")
     print("Time taken:", dt.datetime.now() - start_time)
 
