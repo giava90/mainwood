@@ -161,7 +161,7 @@ def process_file(file_path_and_name):
         print(f"Error processing {file_name}: {e}")
         return None, None, None
 
-def preprocess_data(df, stand_simtype_count = None):
+def preprocess_data(df, stand_simtype_count = None, time_cut = 2160):
     """
     Preprocesses the combined DataFrame by removing unnecessary columns,
     handling missing values, renaming columns with umlauts, and casting volume columns to float.
@@ -171,6 +171,8 @@ def preprocess_data(df, stand_simtype_count = None):
     Args:
         df (pandas.DataFrame): The DataFrame to preprocess.
         stand_simtype_count(defaultdict): Defaultdictionary where keys are stand,simtype) pair and values their observed occurrences
+        time_cut: int, the maximum value for 'Gruppierungsmerkmal' to keep rows (i.e., the maximum year). 
+                Time cut value is exclusive, i.e., rows with 'Gruppierungsmerkmal' >= time_cut are dropped
 
     Returns:
         pandas.DataFrame: The preprocessed DataFrame.
@@ -217,7 +219,9 @@ def preprocess_data(df, stand_simtype_count = None):
 
         # Drop the helper column
         summaries.drop(columns='pair_count', inplace=True)
-
+    # drop the rows that have "Gruppierungsmerkmal" larger than time_cut
+    summaries = summaries[summaries["Gruppierungsmerkmal"].astype(int) < time_cut]
+    
     return summaries
 
 def augment_with_stand_data(summaries, stand_data):
@@ -896,7 +900,64 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     if show:
         plt.show()
     if save:
-        plt.savefig("../figures/biomass_for_sawmills_by_category_and_altitude_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
+        plt.savefig("../figures/biomass_for_sawmills_by_category_and_altitude_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')    
+
+def plot_percentages_of_wood_quality(df_soft, df_hard, save=True, show=False, fname = "all"):
+    """
+    Plots a stacked bar chart of wood quality as a percentage of total wood.
+
+    Parameters:
+    df_soft (pd.DataFrame): DataFrame with years as index and wood volume and quality as columns.
+    show (bool): Whether to display the plot.
+    save (bool): Whether to save the plot as a PNG file.
+    """
+
+    df_biomass_soft = df_soft.groupby(['Gruppierungsmerkmal'])[[
+        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
+    df_biomass_hard = df_hard.groupby(['Gruppierungsmerkmal'])[[
+        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
+    # join the two date frames by the 'Gruppierungsmerkmal'
+    # add _soft and _hard to the corresponging columns
+    df = df_biomass_soft.join(df_biomass_hard, lsuffix='_soft', rsuffix='_hard', how='outer').fillna(0)
+    # rename the columns to more meaningful names
+    df.columns = ['High quality - Softwood', 'Low quality - Softwood', 'High quality - Hardwood', 'Low quality - Hardwood']
+    # cast the indeces to int
+    df.index = df.index.astype(int)
+    # sum the rows by gruop of 10 (i.e., aggregate the rows by 10 years)
+    df = df.groupby(df.index.astype(int) // 10 * 10).sum()
+    # change the name of the index with min and max of the grouped index
+    df.index = [f"{i}-{i+9}" for i in df.index]
+    # Calculate percentage of total population
+    df_percent = df.div(df.sum(axis=1), axis=0) * 100
+
+    # Colors for each borough
+    colors = {
+        "High quality - Softwood": "#fdae61",   # orange
+        "Low quality - Softwood": "#d7191c",     # red-orange
+        "High quality - Hardwood": "#abdda4",  # green
+        "Low quality - Hardwood": "#2b83ba",      # blue
+        "": "#1a9850"  # dark green
+    }
+
+    # Plot
+    ax = df_percent.plot(kind="bar", stacked=True, 
+                         figsize=(12, 6), 
+                         color=[colors[col] for col in df.columns])
+
+    # Labels and title
+    plt.title("Breakdown of assortments", fontsize=14)
+    plt.ylabel("% of assortment")
+    plt.xlabel("Year")
+    plt.xticks(rotation=45)
+
+    # Legend
+    plt.legend(title="", bbox_to_anchor=(1.05, 1), loc="upper left")
+
+    plt.tight_layout()
+    if save:
+        plt.savefig("../figures/wood_quality_"+fname+"_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')    
+    if show:
+        plt.show()
 
 def process_combination(args):
     global case_study, management
@@ -1000,6 +1061,11 @@ def process_combination(args):
 
     print("Plotting normalized biomass for sawmill categories and altitudes...")
     plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), areas, show=show, save=save)
+
+    # normalized 
+    print("Plotting percentages of wood quality...")
+    plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5" )
+    plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5")
     print("All plots generated successfully.")
     print("Time taken:", dt.datetime.now() - start_time)
 
