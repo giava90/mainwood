@@ -945,7 +945,6 @@ def process_combination(args):
     if not summaries.empty:
         areas = summaries.groupby(["stand", "Above1000m"])["area"].mean().groupby("Above1000m").sum().to_dict()
         total_area = sum(areas.values())
-        pdb.set_trace()
         df_biomass_soft_1_grouped = df_soft_1.groupby(['year'])[[
             'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
         df_biomass_hard_1_grouped = df_hard_1.groupby(['year'])[[
