@@ -24,8 +24,8 @@ def parse_filename(filename: str, scenario: str) -> tuple:
     - scenario: str, one of "WOOD", "BAU", "HYBRID", "BIO"
 
     Returns:
-    - tuple: (stand, simtype) if scenario is BIO
-             (stand, simtype_planted_species) otherwise
+    - tuple: (stand, simtype, "") if scenario is BIO
+             (stand, simtype, planted_species) otherwise
     """
     parts = filename.replace(".csv", "").split("_")
 
@@ -34,12 +34,12 @@ def parse_filename(filename: str, scenario: str) -> tuple:
     simtype = parts[2]
 
     if scenario == "BIO":
-        return stand, simtype
+        return stand, simtype, "999"
     else:
-        species = parts[-1] if "planted" in parts else None
-        if species is None:
+        planted_species = parts[-1] if "planted" in parts else None
+        if planted_species is None:
             raise ValueError("Expected 'planted' and species information for non-BIO scenario.")
-        return stand, simtype
+        return stand, simtype, planted_species
 
 def load_data(folder_path, management_scenario):
     """
@@ -62,7 +62,7 @@ def load_data(folder_path, management_scenario):
         filename = os.path.join(folder_path, file)
         if os.path.isfile(filename):
             try:
-                stand, simtype = parse_filename(file, management_scenario)
+                stand, simtype, planted_species = parse_filename(file, management_scenario)
                 # Read the CSV file
                 data = pd.read_csv(filename, sep=";", low_memory=False)
 
@@ -75,6 +75,11 @@ def load_data(folder_path, management_scenario):
                     data = data[1:]
                     data["simtype"] = simtype
                     data["stand"] = stand
+                    data["planted_species"] = planted_species
+                    if management_scenario == "BIO":
+                        data["planting"] = False
+                    else:
+                        data["planting"] = True if planted_species != "999" else False
                     df = pd.concat([df, data], ignore_index=True)
                 else:
                     print(f"Warning: '#Gruppierungsmerkmal' row not found in {file}. Skipping.")
@@ -145,7 +150,7 @@ def process_file(file_path_and_name):
     """
     file_path, file_name, management_scenario = file_path_and_name
     try:
-        stand, simtype = parse_filename(file_name, management_scenario)
+        stand, simtype, planted_species  = parse_filename(file_name, management_scenario)
         df = pd.read_csv(os.path.join(file_path, file_name), sep=";", low_memory=False)
         cut_point = df[df["#ID"] == "#Gruppierungsmerkmal"]
         if cut_point.empty:
@@ -156,20 +161,23 @@ def process_file(file_path_and_name):
         df = df[1:]
         df["simtype"] = simtype
         df["stand"] = stand
+        df["planted_species"] = planted_species 
+        df["planting"] =  True if planted_species != "999" else False
         return df, stand, simtype
     except Exception as e:
         print(f"Error processing {file_name}: {e}")
         return None, None, None
 
-def preprocess_data(df, stand_simtype_count = None, time_cut = 2160):
+def preprocess_data(df, management_scenario, stand_simtype_count = None, time_cut = 2160):
     """
     Preprocesses the combined DataFrame by removing unnecessary columns,
     handling missing values, renaming columns with umlauts, and casting volume columns to float.
     Also, if stand_simtype_count is not None, we divide each (stand,simtype) pair by the count observed.
-    This is to correct for the fact that if a pair as a combination larger than it means, that we runned multiple simulation for it
+    This division is to normalize per number of simulations per (stand,simtype) pair.
 
     Args:
         df (pandas.DataFrame): The DataFrame to preprocess.
+        management_scenario (str): The management scenario, used to set weights.
         stand_simtype_count(defaultdict): Defaultdictionary where keys are stand,simtype) pair and values their observed occurrences
         time_cut: int, the maximum value for 'Gruppierungsmerkmal' to keep rows (i.e., the maximum year). 
                 Time cut value is exclusive, i.e., rows with 'Gruppierungsmerkmal' >= time_cut are dropped
@@ -190,10 +198,8 @@ def preprocess_data(df, stand_simtype_count = None, time_cut = 2160):
     # Drop rows with NaN in 'Baumart'
     summaries = summaries.dropna(subset=["Baumart"])
 
-    # Keep specific columns without NaN as name
-    keep_columns = [x for x in summaries.columns[:7]]
-    keep_columns += [x for x in summaries.columns[-3:]]
-    summaries = summaries[keep_columns]
+    # Drop columns that have nan as column name
+    summaries = summaries.loc[:, ~summaries.columns.isna()]
 
     # Rename columns with umlauts
     summaries.rename({"L�ngenklasse": "Laengenklasse", 'St�rkenklasse': "Staerkenklasse"}, axis=1, inplace=True)
@@ -214,14 +220,52 @@ def preprocess_data(df, stand_simtype_count = None, time_cut = 2160):
         # Create a column with the count for each (stand, simtype) pair
         summaries['pair_count'] = summaries.apply(lambda row: stand_simtype_count[(row['stand'], row['simtype'])], axis=1)
 
-        # Divide all numeric columns (except for stand, simtype, pair_count) by the pair count
+        # Divide all numeric columns (except for stand, simtype, pair_count) by the pair count 
         summaries[cols_to_float] = summaries[cols_to_float].div(summaries['pair_count'], axis=0)
 
         # Drop the helper column
         summaries.drop(columns='pair_count', inplace=True)
-    # drop the rows that have "Gruppierungsmerkmal" larger than time_cut
-    summaries = summaries[summaries["Gruppierungsmerkmal"].astype(int) < time_cut]
+
+    # rename the column of summaries "Gruppierungsmerkmal" as "year"
+    summaries.rename(columns={"Gruppierungsmerkmal": "year"}, inplace=True)
+    # cast years as int
+    summaries["year"] = summaries["year"].astype(int)
+    # drop the rows that have "year", (i.e.,"Gruppierungsmerkmal")larger than time_cut
+    summaries = summaries[summaries["year"]< time_cut]
+
     
+    if management_scenario == "BIO":
+        # add columns called weight with value 1.0
+        summaries["weight"] = summaries["planting"].apply(lambda x: 0.9 if not x else 0.1)
+    if management_scenario != "BIO":
+        # add columns called weight with value 0.9 if planting is False, 0.1 otherwise
+        summaries["weight"] = np.where(summaries["planting"], 0.1, 0.9)
+        # count the number of unique species per (stand, simtype) pair when plating is true
+        mask = summaries['planting']
+        species_count = (
+            summaries[mask].groupby(['stand', 'simtype'])['planted_species']
+            .nunique()
+            .reset_index(name='species_count')
+        )
+        # merge the species_count back to summaries
+        summaries = summaries.merge(species_count, on=['stand', 'simtype'], how='left', copy=False)
+        # divide the weight by (species_count - 1) if planting is True
+        mask = summaries['planting']
+        summaries.loc[mask, 'weight'] /= summaries.loc[mask, 'species_count']
+
+        # drop the species_count column
+        summaries.drop(columns=['species_count'], inplace=True)
+        # drop the planting column
+        summaries = summaries.drop(columns=["planting"])
+    
+    # multiply the weight by the value in the "Volumen OR [m3]"  and "Volumen IR [m3]" columns
+    summaries["Volumen OR [m3]"] = summaries["Volumen OR [m3]"] * summaries["weight"]
+    summaries["Volumen IR [m3]"] = summaries["Volumen IR [m3]"] * summaries["weight"]
+    # multiply the value in the "Wert [CHF]" column by the weight
+    summaries["Wert [CHF]"] = summaries["Wert [CHF]"] * summaries["weight"]
+    # drop the weight column
+    summaries = summaries.drop(columns=["weight"])     
+
     return summaries
 
 def augment_with_stand_data(summaries, stand_data):
@@ -271,7 +315,9 @@ def add_sawmill_diameter_info(summaries):
     if summaries.empty:
         print("Warning: Input DataFrame is empty, no sawmill diameter information added.")
         return summaries
-
+    # the following categorization is more about quality that sawmills.
+    # sawmills accept diameter usually diameter above 15 or 18 (see Blumer-Lehmann or tschopp) up to 50 or 60.
+    # this categorization could be improved.
     staerken2sawmills_use = {"1a": False, "1b": False, "2a": False, "2b": False, "3a": False, "3b": False,
                              "4": True, "5": True, "6": True, "7": True, "8": True,
                              "Restholz": False}
@@ -461,23 +507,23 @@ def plot_biomass(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=Tr
 
     plt.subplot(1, 2, 1)
     plt.ylabel('Wood (m3)')
-    plt.plot(df_soft_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().index.astype(int),
-             df_soft_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().values, label="softwood")
-    plt.plot(df_hard_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().index.astype(int),
-             df_hard_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().values, label="hardwood")
+    plt.plot(df_soft_1.groupby(['year'])["Volumen OR [m3]"].sum().index,
+             df_soft_1.groupby(['year'])["Volumen OR [m3]"].sum().values, label="softwood")
+    plt.plot(df_hard_1.groupby(['year'])["Volumen OR [m3]"].sum().index,
+             df_hard_1.groupby(['year'])["Volumen OR [m3]"].sum().values, label="hardwood")
     plt.xlabel('Year')
-    plt.yscale('log')
-    plt.xlim(2010, 2310)
+    #plt.yscale('log')
+    #plt.xlim(2010, 2310)
     plt.title('RCP 8.5 - Total Biomass')
     plt.legend()
 
     plt.subplot(1, 2, 2)
-    plt.plot(df_soft_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().index.astype(int),
-             df_soft_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().values, label="softwood")
-    plt.plot(df_hard_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().index.astype(int),
-             df_hard_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum().values, label="hardwood")
-    plt.yscale('log')
-    plt.xlim(2010, 2310)
+    plt.plot(df_soft_7.groupby(['year'])["Volumen OR [m3]"].sum().index,
+             df_soft_7.groupby(['year'])["Volumen OR [m3]"].sum().values, label="softwood")
+    plt.plot(df_hard_7.groupby(['year'])["Volumen OR [m3]"].sum().index,
+             df_hard_7.groupby(['year'])["Volumen OR [m3]"].sum().values, label="hardwood")
+    #plt.yscale('log')
+    # plt.xlim(2010, 2310)
     plt.xlabel('Year')
     plt.title('RCP 4.5 - Total Biomass')
     plt.legend()
@@ -511,11 +557,11 @@ def plot_biomass_with_rolling_stats(summaries, show=False, save=True):
     areas = summaries.groupby(["stand", "Above1000m"])["sim_area (m2)"].mean().groupby("Above1000m").sum().to_dict()
     total_area = sum(areas.values())
 
-    # Group by 'Gruppierungsmerkmal' and sum 'Volumen OR [m3]'
-    df_biomass_soft_1 = df_soft_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum()
-    df_biomass_hard_1 = df_hard_1.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum()
-    df_biomass_soft_7 = df_soft_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum()
-    df_biomass_hard_7 = df_hard_7.groupby(['Gruppierungsmerkmal'])["Volumen OR [m3]"].sum()
+    # Group by 'year' and sum 'Volumen OR [m3]'
+    df_biomass_soft_1 = df_soft_1.groupby(['year'])["Volumen OR [m3]"].sum()
+    df_biomass_hard_1 = df_hard_1.groupby(['year'])["Volumen OR [m3]"].sum()
+    df_biomass_soft_7 = df_soft_7.groupby(['year'])["Volumen OR [m3]"].sum()
+    df_biomass_hard_7 = df_hard_7.groupby(['year'])["Volumen OR [m3]"].sum()
 
     # Apply rolling mean and std
     df_biomass_soft_1_mean, df_biomass_soft_1_std = rolling_stats(df_biomass_soft_1, time_window=time_window)
@@ -528,7 +574,7 @@ def plot_biomass_with_rolling_stats(summaries, show=False, save=True):
         print("Warning: No biomass data available for plotting with rolling statistics.")
         return
 
-    x = df_biomass_soft_1.index.astype(int)
+    x = df_biomass_soft_1.index
 
     plt.figure(figsize=(10, 4))
 
@@ -544,7 +590,7 @@ def plot_biomass_with_rolling_stats(summaries, show=False, save=True):
         plt.fill_between(x, (df_biomass_hard_1_mean - df_biomass_hard_1_std) * 10**4 / total_area,
                          (df_biomass_hard_1_mean + df_biomass_hard_1_std) * 10**4 / total_area, color="lightgrey", alpha=0.6)
     plt.xlabel('Year')
-    plt.xlim(2030, 2310)
+    # plt.xlim(2030, 2310)
     plt.legend()
 
     plt.subplot(1, 2, 2)
@@ -557,7 +603,7 @@ def plot_biomass_with_rolling_stats(summaries, show=False, save=True):
         plt.plot(x, df_biomass_hard_7_mean * 10**4 / total_area, label="Hardwood")
         plt.fill_between(x, (df_biomass_hard_7_mean - df_biomass_hard_7_std) * 10**4 / total_area,
                          (df_biomass_hard_7_mean + df_biomass_hard_7_std) * 10**4 / total_area, color="lightgrey", alpha=0.6)
-    plt.xlim(2030, 2310)
+    # plt.xlim(2030, 2310)
     plt.xlabel('Year')
     plt.legend()
 
@@ -580,23 +626,23 @@ def plot_biomass_for_sawmill_categories(df_soft_1, df_hard_1, df_soft_7, df_hard
         show (bool, optional): Whether to show the plot. Defaults to False.
         save (bool, optional): Whether to save the plot. Defaults to True.
     """
-    df_biomass_soft_1 = df_soft_1.groupby(['Gruppierungsmerkmal'])[[
+    df_biomass_soft_1 = df_soft_1.groupby(['year'])[[
         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    df_biomass_hard_1 = df_hard_1.groupby(['Gruppierungsmerkmal'])[[
+    df_biomass_hard_1 = df_hard_1.groupby(['year'])[[
         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    df_biomass_soft_7 = df_soft_7.groupby(['Gruppierungsmerkmal'])[[
+    df_biomass_soft_7 = df_soft_7.groupby(['year'])[[
         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    df_biomass_hard_7 = df_hard_7.groupby(['Gruppierungsmerkmal'])[[
+    df_biomass_hard_7 = df_hard_7.groupby(['year'])[[
         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
 
     y_soft_1 = df_biomass_soft_1.values
     y_hard_1 = df_biomass_hard_1.values
     y_soft_7 = df_biomass_soft_7.values
     y_hard_7 = df_biomass_hard_7.values
-    x1 = df_biomass_soft_1.index.astype(int)
-    x2 = df_biomass_soft_7.index.astype(int)
-    x3 = df_biomass_hard_1.index.astype(int)
-    x4 = df_biomass_hard_7.index.astype(int)
+    x1 = df_biomass_soft_1.index
+    x2 = df_biomass_soft_7.index
+    x3 = df_biomass_hard_1.index
+    x4 = df_biomass_hard_7.index
 
     plt.figure(figsize=(6, 6))
 
@@ -672,10 +718,10 @@ def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass
     df_biomass_soft_7_mean, df_biomass_soft_7_std = rolling_stats(df_biomass_soft_7_norm)
     df_biomass_hard_7_mean, df_biomass_hard_7_std = rolling_stats(df_biomass_hard_7_norm)
 
-    x1 = df_biomass_soft_1.index.astype(int)
-    x2 = df_biomass_soft_7.index.astype(int)
-    x3 = df_biomass_hard_1.index.astype(int)
-    x4 = df_biomass_hard_7.index.astype(int)
+    x1 = df_biomass_soft_1.index
+    x2 = df_biomass_soft_7.index
+    x3 = df_biomass_hard_1.index
+    x4 = df_biomass_hard_7.index
 
     colors = sns.color_palette("tab10", n_colors=2)
     ls_styles = '-'
@@ -684,7 +730,7 @@ def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass
 
     # Softwood - For Sawmills
     plt.subplot(2, 2, 1)
-    plt.xlim(2025, 2305)
+    # plt.xlim(2025, 2305)
     plt.xticks()
     if df_biomass_soft_1_mean is not None and df_biomass_soft_1_std is not None:
         plt.plot(x1, df_biomass_soft_1_mean.iloc[:, 0], label="RCP 8.5", lw=2, ls=ls_styles[0], color=colors[0])
@@ -699,7 +745,7 @@ def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass
 
     # Hardwood - For Sawmills
     ax = plt.subplot(2, 2, 2)
-    plt.xlim(2025, 2305)
+    # plt.xlim(2025, 2305)
     plt.xticks()
     if df_biomass_hard_1_mean is not None and df_biomass_hard_1_std is not None:
         plt.plot(x3, df_biomass_hard_1_mean.iloc[:, 0], label="RCP 8.5", lw=2, ls=ls_styles, color=colors[0])
@@ -715,7 +761,7 @@ def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass
 
     # Softwood - Not For Sawmills
     plt.subplot(2, 2, 3)
-    plt.xlim(2025, 2305)
+    # plt.xlim(2025, 2305)
     plt.xticks()
     if df_biomass_soft_1_mean is not None and df_biomass_soft_1_std is not None:
         plt.plot(x1, df_biomass_soft_1_mean.iloc[:, 1], label="RCP 8.5", lw=2, ls=ls_styles, color=colors[0])
@@ -730,7 +776,7 @@ def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass
 
     # Hardwood - Not For Sawmills
     ax = plt.subplot(2, 2, 4)
-    plt.xlim(2025, 2305)
+    # plt.xlim(2025, 2305)
     plt.xticks()
     if df_biomass_hard_1_mean is not None and df_biomass_hard_1_std is not None:
         plt.plot(x3, df_biomass_hard_1_mean.iloc[:, 1], label="RCP 8.5", lw=2, ls=ls_styles, color=colors[0])
@@ -767,28 +813,28 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
         save (bool, optional): Whether to save the plot. Defaults to True.
     """
     # Get all expected combinations
-    all_groups = df_hard_7['Gruppierungsmerkmal'].unique()
+    all_groups = df_hard_7['year'].unique()
     above1000m_values = [1.0, 0.0]
 
     # Create full index
-    full_index = pd.MultiIndex.from_product([all_groups, above1000m_values], names=['Gruppierungsmerkmal', 'Above1000m'])
+    full_index = pd.MultiIndex.from_product([all_groups, above1000m_values], names=['year', 'Above1000m'])
 
-    df_biomass_soft_1 = df_soft_1.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
+    df_biomass_soft_1 = df_soft_1.groupby(['year', "Above1000m"])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
     df_biomass_soft_1 = df_biomass_soft_1.reindex(full_index, fill_value=0)
     df_biomass_soft_1 = df_biomass_soft_1.fillna(0)
     df_biomass_soft_1 = df_biomass_soft_1.unstack()
 
-    df_biomass_hard_1 = df_hard_1.groupby(['Gruppierungsmerkmal', "Above1000m" ])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
+    df_biomass_hard_1 = df_hard_1.groupby(['year', "Above1000m" ])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
     df_biomass_hard_1 = df_biomass_hard_1.reindex(full_index, fill_value=0)
     df_biomass_hard_1 = df_biomass_hard_1.fillna(0)
     df_biomass_hard_1 = df_biomass_hard_1.unstack()
 
-    df_biomass_soft_7 = df_soft_7.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
+    df_biomass_soft_7 = df_soft_7.groupby(['year', "Above1000m"])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
     df_biomass_soft_7 = df_biomass_soft_7.reindex(full_index, fill_value=0)
     df_biomass_soft_7 = df_biomass_soft_7.fillna(0)
     df_biomass_soft_7 = df_biomass_soft_7.unstack()
 
-    df_biomass_hard_7 = df_hard_7.groupby(['Gruppierungsmerkmal', "Above1000m"])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
+    df_biomass_hard_7 = df_hard_7.groupby(['year', "Above1000m"])[["Volumen OR [m3]_for_sawmills", "Volumen OR [m3]_not_for_sawmills"]].sum()
     df_biomass_hard_7 = df_biomass_hard_7.reindex(full_index, fill_value=0)
     df_biomass_hard_7 = df_biomass_hard_7.fillna(0)
     df_biomass_hard_7= df_biomass_hard_7.unstack()
@@ -796,10 +842,14 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
 
     # normalizing the volumen by total area in ha
     norm_factor = np.array([areas[0], areas[1], areas[0], areas[1]]) / 10**4
-    df_biomass_soft_1 = df_biomass_soft_1 / norm_factor
-    df_biomass_hard_1 = df_biomass_hard_1 / norm_factor
-    df_biomass_soft_7 = df_biomass_soft_7 / norm_factor
-    df_biomass_hard_7 = df_biomass_hard_7 / norm_factor
+    try:
+        df_biomass_soft_1 = df_biomass_soft_1 / norm_factor
+        df_biomass_hard_1 = df_biomass_hard_1 / norm_factor
+        df_biomass_soft_7 = df_biomass_soft_7 / norm_factor
+        df_biomass_hard_7 = df_biomass_hard_7 / norm_factor
+    except ValueError:
+        print("Warning: Unable to normalize - m3/ha values could be corrupted in biomass_for_sawmill_categories_and_altitues")
+        return None
     # Apply rolling mean and std
     df_biomass_soft_1_mean, df_biomass_soft_1_std = rolling_stats(df_biomass_soft_1)
     df_biomass_hard_1_mean, df_biomass_hard_1_std = rolling_stats(df_biomass_hard_1)
@@ -807,10 +857,10 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     df_biomass_hard_7_mean, df_biomass_hard_7_std = rolling_stats(df_biomass_hard_7)
 
     #
-    x1 = df_biomass_soft_1.index.astype(int)
-    x2 = df_biomass_soft_7.index.astype(int)
-    x3 = df_biomass_hard_1.index.astype(int)
-    x4 = df_biomass_hard_7.index.astype(int)
+    x1 = df_biomass_soft_1.index
+    x2 = df_biomass_soft_7.index
+    x3 = df_biomass_hard_1.index
+    x4 = df_biomass_hard_7.index
     # we use blue and orange for the "RCP 8.5" and "RCP 4.5" for consistency
     colors = sns.color_palette("tab10", n_colors=2)
     # we use two line styles for below 1000 and above 1000
@@ -818,8 +868,8 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     #making the plot
     plt.figure(figsize=(8, 6))
     plt.subplot(2, 2, 1)
-    plt.xlim(2025,2305)
-    plt.xticks([2030, 2100, 2200, 2300])
+    # plt.xlim(2025,2305)
+    # plt.xticks([2030, 2100, 2200, 2300])
     plt.plot(x1, df_biomass_soft_1_mean.iloc[:, 0], label="RCP 8.5 - BELOW ", lw=2, ls=ls_styles[0], color=colors[0])
     plt.fill_between(x1, (df_biomass_soft_1_mean.iloc[:, 0] - df_biomass_soft_1_std.iloc[:, 0]) ,
                     (df_biomass_soft_1_mean.iloc[:, 0] + df_biomass_soft_1_std.iloc[:, 0]) , color="lightgrey", alpha=0.3)
@@ -836,8 +886,8 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     plt.ylabel('Wood (m3/ha)')
     plt.title("Softwood", fontsize = 18)
     ax = plt.subplot(2, 2, 2)
-    plt.xlim(2025,2305)
-    plt.xticks([2030, 2100, 2200, 2300])
+    # plt.xlim(2025,2305)
+    # plt.xticks([2030, 2100, 2200, 2300])
     plt.plot(x3, df_biomass_hard_1_mean.iloc[:, 0], label="RCP 8.5 - BELOW ", lw=2, ls=ls_styles[0], color=colors[0])
     plt.fill_between(x3, (df_biomass_hard_1_mean.iloc[:, 0] - df_biomass_hard_1_std.iloc[:, 0]) ,
                     (df_biomass_hard_1_mean.iloc[:, 0] + df_biomass_hard_1_std.iloc[:, 0]) , color="lightgrey", alpha=0.3)
@@ -854,8 +904,8 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     ax.yaxis.set_label_position("right")
     plt.title("Hardwood", fontsize = 18)
     plt.subplot(2, 2, 3)
-    plt.xlim(2025,2305)
-    plt.xticks([2030, 2100, 2200, 2300])
+    # plt.xlim(2025,2305)
+    # plt.xticks([2030, 2100, 2200, 2300])
     plt.plot(x1, df_biomass_soft_1_mean.iloc[:, 2], label="RCP 8.5 - BELOW ", lw=2, ls=ls_styles[0], color=colors[0])
     plt.fill_between(x1, (df_biomass_soft_1_mean.iloc[:, 2] - df_biomass_soft_1_std.iloc[:, 2]) ,
                     (df_biomass_soft_1_mean.iloc[:, 2] + df_biomass_soft_1_std.iloc[:, 2]) , color="lightgrey", alpha=0.3)
@@ -871,8 +921,8 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     plt.ylabel('Wood (m3/ha)')
     plt.xlabel('Year')
     ax =plt.subplot(2, 2, 4)
-    plt.xlim(2025,2305)
-    plt.xticks([2030, 2100, 2200, 2300])
+    # plt.xlim(2025,2305)
+    # plt.xticks([2030, 2100, 2200, 2300])
     plt.plot(x3, df_biomass_hard_1_mean.iloc[:, 2], label="RCP 8.5 - BELOW ", lw=2, ls=ls_styles[0], color=colors[0])
     plt.fill_between(x3, (df_biomass_hard_1_mean.iloc[:, 2] - df_biomass_hard_1_std.iloc[:, 2]) ,
                     (df_biomass_hard_1_mean.iloc[:, 2] + df_biomass_hard_1_std.iloc[:, 2]) , color="lightgrey", alpha=0.3)
@@ -914,19 +964,17 @@ def plot_percentages_of_wood_quality(df_soft, df_hard, save=True, show=False, fn
     percent (bool): If True, plot percentages; if False, plot absolute values.
     """
 
-    df_biomass_soft = df_soft.groupby(['Gruppierungsmerkmal'])[[
+    df_biomass_soft = df_soft.groupby(['year'])[[
         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    df_biomass_hard = df_hard.groupby(['Gruppierungsmerkmal'])[[
+    df_biomass_hard = df_hard.groupby(['year'])[[
         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    # join the two date frames by the 'Gruppierungsmerkmal'
+    # join the two date frames by the 'year'
     # add _soft and _hard to the corresponging columns
     df = df_biomass_soft.join(df_biomass_hard, lsuffix='_soft', rsuffix='_hard', how='outer').fillna(0)
     # rename the columns to more meaningful names
     df.columns = ['High quality - Softwood', 'Low quality - Softwood', 'High quality - Hardwood', 'Low quality - Hardwood']
-    # cast the indeces to int
-    df.index = df.index.astype(int)
     # sum the rows by gruop of 10 (i.e., aggregate the rows by 10 years)
-    df = df.groupby(df.index.astype(int) // 10 * 10).sum()
+    df = df.groupby(df.index // 10 * 10).sum()
     # change the name of the index with min and max of the grouped index
     df.index = [f"{i}-{i+9}" for i in df.index]
     # Calculate percentage of total population
@@ -997,7 +1045,7 @@ def process_combination(args):
     df, stand_simtype_count = load_data_parallel(folder_path, management, sample, num_cores)
 
     print("Preprocessing main data...")
-    summaries = preprocess_data(df, stand_simtype_count)
+    summaries = preprocess_data(df, management, stand_simtype_count)
 
     print("Loading stand data...")
     stand_data = pd.read_csv(stand_data_path)
@@ -1026,9 +1074,12 @@ def process_combination(args):
         summaries["Volumen OR [m3]_for_sawmills"] = summaries.apply(
             lambda x: calculate_biomass_for_sawmills(x, baumart2fraction), axis=1
         )
-        summaries["Volumen OR [m3]_not_for_sawmills"] = summaries.apply(
-            lambda x: calculate_biomass_not_for_sawmills(x, baumart2fraction), axis=1
-        )
+        #summaries["Volumen OR [m3]_not_for_sawmills"] = summaries.apply(
+        #    lambda x: calculate_biomass_not_for_sawmills(x, baumart2fraction), axis=1
+        #)
+        summaries["Volumen OR [m3]_not_for_sawmills"] = summaries["Volumen OR [m3]"] - summaries["Volumen OR [m3]_for_sawmills"]
+        # drop column baumart_for_quality
+        summaries.drop(columns=["baumart_for_quality","is_for_sawmills_diameter"], inplace=True)
     else:
         print("Warning: Summaries DataFrame is empty or quality mapping is not available. Skipping sawmill biomass calculation.")
 
@@ -1046,13 +1097,13 @@ def process_combination(args):
         areas = summaries.groupby(["stand", "Above1000m"])["sim_area (m2)"].mean().groupby("Above1000m").sum().to_dict()
         total_area = sum(areas.values())
 
-        df_biomass_soft_1_grouped = df_soft_1.groupby(['Gruppierungsmerkmal'])[[
+        df_biomass_soft_1_grouped = df_soft_1.groupby(['year'])[[
             'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-        df_biomass_hard_1_grouped = df_hard_1.groupby(['Gruppierungsmerkmal'])[[
+        df_biomass_hard_1_grouped = df_hard_1.groupby(['year'])[[
             'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-        df_biomass_soft_7_grouped = df_soft_7.groupby(['Gruppierungsmerkmal'])[[
+        df_biomass_soft_7_grouped = df_soft_7.groupby(['year'])[[
             'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-        df_biomass_hard_7_grouped = df_hard_7.groupby(['Gruppierungsmerkmal'])[[
+        df_biomass_hard_7_grouped = df_hard_7.groupby(['year'])[[
             'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
 
         print("Plotting normalized biomass for sawmill categories with rolling stats...")
@@ -1064,9 +1115,8 @@ def process_combination(args):
             total_area,
             show=show, save=save
         )
-
-    print("Plotting biomass for sawmill categories...")
-    plot_biomass_for_sawmill_categories(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), show=show, save=save)
+    # print("Plotting biomass for sawmill categories as scatter plot...")
+    # plot_biomass_for_sawmill_categories(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), show=show, save=save)
 
     print("Plotting normalized biomass for sawmill categories and altitudes...")
     plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), areas, show=show, save=save)
@@ -1074,10 +1124,10 @@ def process_combination(args):
     # normalized 
     print("Plotting percentages of wood quality as stacked bars...")
     plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5" )
-    plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5")
+    # plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5")
     print("Plotting total of wood quality as stacked bars...")
     plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5", percent=False)
-    plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5", percent=False)
+    # plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5", percent=False)
     print("All plots generated successfully.")
     print("Time taken:", dt.datetime.now() - start_time)
 
@@ -1095,7 +1145,7 @@ if __name__ == "__main__":
     print("Number of cores to be used ", num_cores)
     print("The sample size is ", sample_size)
     # check that the argument is valid
-    valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL"]
+    valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL", "BIO"]
     valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All"]
     if case_study_input not in valid_case_studies:
         raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
