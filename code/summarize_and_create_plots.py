@@ -295,9 +295,21 @@ def augment_with_stand_data(summaries, stand_data):
 
     # Adding area and altitude to summaries
     summaries["Above1000m"] = summaries["stand"].astype(str).map(stand_to_else_dict["Above1000m"])
+    # computing the simulated area
     #summaries["sim_area (m2)"] = summaries["stand"].astype(str).map(stand_to_else_dict["n.patches"]) * 625
+    # the simulated area is always 100 patches of 625m2 each
     summaries["sim_area (m2)"] = 100 * 625
     summaries["area"] = summaries["stand"].astype(str).map(stand_to_else_dict["area"])
+    # rescaling the volume according to the actual size of the stand
+    # in the simulations, we have 100 patches of 625 m2 each
+    # however, the actual area of the stand is different and saved in "area" column
+    # hence, we have to divide the "Volumen OR [m3]" by 100 * 625 and multiply by the actual area
+    # we have saved the simulated area in "sim_area (m2)" column
+    # summaries["stand_productivity"] = summaries["Volumen OR [m3]"] / summaries["sim_area (m2)"]
+    summaries["Volumen OR [m3]"] /= summaries["sim_area (m2)"] 
+    summaries["Volumen OR [m3]"] *= summaries["area"]
+    summaries["Volumen IR [m3]"] /= summaries["sim_area (m2)"] 
+    summaries["Volumen IR [m3]"] *= summaries["area"]
 
     return summaries
 
@@ -495,14 +507,6 @@ def plot_biomass(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=Tr
         show (bool, optional): Whether to show the plot. Defaults to False.
         save (bool, optional): Whether to save the plot. Defaults to True.
     """
-    # in the simulations, we have 100 stands of 625 m2 each
-    # however, the actual area of the stand is different and saved in "area" column
-    # hence, we have to divide the "Volumen OR [m3]" by 100 * 625 and multiply by the actual area
-    # we have saved the simulated area in "sim_area (m2)" column
-    df_soft_1["Volumen OR [m3]"] = df_soft_1["Volumen OR [m3]"] / df_soft_1["sim_area (m2)"] * df_soft_1["area"] 
-    df_hard_1["Volumen OR [m3]"] = df_hard_1["Volumen OR [m3]"] / df_hard_1["sim_area (m2)"] * df_hard_1["area"]
-    df_soft_7["Volumen OR [m3]"] = df_soft_7["Volumen OR [m3]"] / df_soft_7["sim_area (m2)"] * df_soft_7["area"]
-    df_hard_7["Volumen OR [m3]"] = df_hard_7["Volumen OR [m3]"] / df_hard_7["sim_area (m2)"] * df_hard_7["area"] 
     plt.figure(figsize=(10, 4))
 
     plt.subplot(1, 2, 1)
@@ -533,161 +537,6 @@ def plot_biomass(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=Tr
         plt.show()
     if save:
         plt.savefig("../figures/biomass_plot_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
-
-def plot_biomass_with_rolling_stats(summaries, show=False, save=True):
-    """
-    Calculates and plots the average biomass of softwood and hardwood under different RCPs
-    with rolling mean and standard deviation, normalized by total area.
-
-    Args:
-        summaries (pandas.DataFrame): The processed summaries DataFrame.
-        show (bool, optional): Whether to show the plot. Defaults to False.
-        save (bool, optional): Whether to save the plot. Defaults to True.
-    """
-    # Define time window for rolling statistics
-    time_window = 10
-
-    # Filter data for RCP 8.5 and RCP 4.5
-    df_soft_1 = summaries[(summaries["simtype"] == "1") & (summaries["is_soft"] == True)]
-    df_hard_1 = summaries[(summaries["simtype"] == "1") & (summaries["is_hard"] == True)]
-    df_soft_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_soft"] == True)]
-    df_hard_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_hard"] == True)]
-
-    # Calculate total area
-    areas = summaries.groupby(["stand", "Above1000m"])["sim_area (m2)"].mean().groupby("Above1000m").sum().to_dict()
-    total_area = sum(areas.values())
-
-    # Group by 'year' and sum 'Volumen OR [m3]'
-    df_biomass_soft_1 = df_soft_1.groupby(['year'])["Volumen OR [m3]"].sum()
-    df_biomass_hard_1 = df_hard_1.groupby(['year'])["Volumen OR [m3]"].sum()
-    df_biomass_soft_7 = df_soft_7.groupby(['year'])["Volumen OR [m3]"].sum()
-    df_biomass_hard_7 = df_hard_7.groupby(['year'])["Volumen OR [m3]"].sum()
-
-    # Apply rolling mean and std
-    df_biomass_soft_1_mean, df_biomass_soft_1_std = rolling_stats(df_biomass_soft_1, time_window=time_window)
-    df_biomass_hard_1_mean, df_biomass_hard_1_std = rolling_stats(df_biomass_hard_1, time_window=time_window)
-    df_biomass_soft_7_mean, df_biomass_soft_7_std = rolling_stats(df_biomass_soft_7, time_window=time_window)
-    df_biomass_hard_7_mean, df_biomass_hard_7_std = rolling_stats(df_biomass_hard_7, time_window=time_window)
-
-    if all([df_biomass_soft_1_mean is None, df_biomass_hard_1_mean is None,
-            df_biomass_soft_7_mean is None, df_biomass_hard_7_mean is None]):
-        print("Warning: No biomass data available for plotting with rolling statistics.")
-        return
-
-    x = df_biomass_soft_1.index
-
-    plt.figure(figsize=(10, 4))
-
-    plt.subplot(1, 2, 1)
-    plt.title("RCP 8.5")
-    plt.ylabel('Wood (m3 / ha)')
-    if df_biomass_soft_1_mean is not None and df_biomass_soft_1_std is not None:
-        plt.plot(x, df_biomass_soft_1_mean * 10**4 / total_area, label="Softwood")
-        plt.fill_between(x, (df_biomass_soft_1_mean - df_biomass_soft_1_std) * 10**4 / total_area,
-                         (df_biomass_soft_1_mean + df_biomass_soft_1_std) * 10**4 / total_area, color="lightgrey", alpha=0.6)
-    if df_biomass_hard_1_mean is not None and df_biomass_hard_1_std is not None:
-        plt.plot(x, df_biomass_hard_1_mean * 10**4 / total_area, label="Hardwood")
-        plt.fill_between(x, (df_biomass_hard_1_mean - df_biomass_hard_1_std) * 10**4 / total_area,
-                         (df_biomass_hard_1_mean + df_biomass_hard_1_std) * 10**4 / total_area, color="lightgrey", alpha=0.6)
-    plt.xlabel('Year')
-    # plt.xlim(2030, 2310)
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.title("RCP 4.5")
-    if df_biomass_soft_7_mean is not None and df_biomass_soft_7_std is not None:
-        plt.plot(x, df_biomass_soft_7_mean * 10**4 / total_area, label="Softwood")
-        plt.fill_between(x, (df_biomass_soft_7_mean - df_biomass_soft_7_std) * 10**4 / total_area,
-                         (df_biomass_soft_7_mean + df_biomass_soft_7_std) * 10**4 / total_area, color="lightgrey", alpha=0.6)
-    if df_biomass_hard_7_mean is not None and df_biomass_hard_7_std is not None:
-        plt.plot(x, df_biomass_hard_7_mean * 10**4 / total_area, label="Hardwood")
-        plt.fill_between(x, (df_biomass_hard_7_mean - df_biomass_hard_7_std) * 10**4 / total_area,
-                         (df_biomass_hard_7_mean + df_biomass_hard_7_std) * 10**4 / total_area, color="lightgrey", alpha=0.6)
-    # plt.xlim(2030, 2310)
-    plt.xlabel('Year')
-    plt.legend()
-
-    plt.tight_layout()
-    if show:
-        plt.show()
-    if save:
-        plt.savefig("../figures/biomass_plot_with_rolling_time_window_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
-
-def plot_biomass_for_sawmill_categories(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=True):
-    """
-    Generates and displays scatter plots showing the biomass suitable and not suitable
-    for sawmills for softwood and hardwood under two RCP scenarios.
-
-    Args:
-        df_soft_1 (pandas.DataFrame): Softwood data for RCP 8.5 with sawmill categories.
-        df_hard_1 (pandas.DataFrame): Hardwood data for RCP 8.5 with sawmill categories.
-        df_soft_7 (pandas.DataFrame): Softwood data for RCP 4.5 with sawmill categories.
-        df_hard_7 (pandas.DataFrame): Hardwood data for RCP 4.5 with sawmill categories.
-        show (bool, optional): Whether to show the plot. Defaults to False.
-        save (bool, optional): Whether to save the plot. Defaults to True.
-    """
-    df_biomass_soft_1 = df_soft_1.groupby(['year'])[[
-        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    df_biomass_hard_1 = df_hard_1.groupby(['year'])[[
-        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    df_biomass_soft_7 = df_soft_7.groupby(['year'])[[
-        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    df_biomass_hard_7 = df_hard_7.groupby(['year'])[[
-        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-
-    y_soft_1 = df_biomass_soft_1.values
-    y_hard_1 = df_biomass_hard_1.values
-    y_soft_7 = df_biomass_soft_7.values
-    y_hard_7 = df_biomass_hard_7.values
-    x1 = df_biomass_soft_1.index
-    x2 = df_biomass_soft_7.index
-    x3 = df_biomass_hard_1.index
-    x4 = df_biomass_hard_7.index
-
-    plt.figure(figsize=(6, 6))
-
-    # Softwood - For Sawmills
-    plt.subplot(2, 2, 1)
-    ls_styles = ['-', '--']
-    colors = sns.color_palette("tab10", n_colors=2)
-    plt.scatter(x1, y_soft_1[:, 0] * 10**3, label="RCP 8.5", alpha=0.8, lw=2, ls=ls_styles, color=colors[0])
-    plt.scatter(x2, y_soft_7[:, 0] * 10**3, label="RCP 4.5", alpha=0.8, lw=2, ls=ls_styles, color=colors[1])
-    plt.yscale("log")
-    plt.ylabel('Wood (m3)')
-    plt.title("Soft-wood", fontsize=18)
-
-    # Hardwood - For Sawmills
-    ax = plt.subplot(2, 2, 2)
-    plt.scatter(x3, y_hard_1[:, 0] * 10**3, label="RCP 8.5", alpha=0.8, lw=2, ls=ls_styles, color=colors[0])
-    plt.scatter(x4, y_hard_7[:, 0] * 10**3, label="RCP 4.5", alpha=0.8, lw=2, ls=ls_styles, color=colors[1])
-    plt.yscale("log")
-    plt.ylabel('High quality \n (A,B/C)', labelpad=30, fontsize=18)
-    ax.yaxis.set_label_position("right")
-    plt.title("Hard-wood", fontsize=18)
-
-    # Softwood - Not For Sawmills
-    plt.subplot(2, 2, 3)
-    plt.scatter(x1, y_soft_1[:, 1] * 10**3, label="RCP 8.5", alpha=0.8, lw=2, ls=ls_styles, color=colors[0])
-    plt.scatter(x2, y_soft_7[:, 1] * 10**3, label="RCP 4.5", alpha=0.8, lw=2, ls=ls_styles, color=colors[1])
-    plt.yscale("log")
-    plt.ylabel('Wood (m3)')
-    plt.xlabel('Year')
-
-    # Hardwood - Not For Sawmills
-    ax = plt.subplot(2, 2, 4)
-    plt.scatter(x3, y_hard_1[:, 1] * 10**3, label="RCP 8.5", alpha=0.8, lw=2, ls=ls_styles, color=colors[0])
-    plt.scatter(x4, y_hard_7[:, 1] * 10**3, label="RCP 4.5", alpha=0.8, lw=2, ls=ls_styles, color=colors[1])
-    plt.yscale("log")
-    plt.xlabel('Year')
-    plt.ylabel('Low quality', labelpad=30, fontsize=18)
-    ax.yaxis.set_label_position("right")
-
-    plt.tight_layout()
-    plt.legend(loc='upper left', bbox_to_anchor=(1.05, 1.2))
-    if show:
-        plt.show()
-    if save:
-        plt.savefig("../figures/biomass_sawmill_categories_"+str(case_study)+"_"+str(management)+".png", dpi=300, bbox_inches='tight')
 
 def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass_hard_1,
                                                    df_biomass_soft_7, df_biomass_hard_7,
@@ -813,7 +662,7 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
         save (bool, optional): Whether to save the plot. Defaults to True.
     """
     # Get all expected combinations
-    all_groups = df_hard_7['year'].unique()
+    all_groups = df_soft_1['year'].unique()
     above1000m_values = [1.0, 0.0]
 
     # Create full index
@@ -883,7 +732,7 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     plt.fill_between(x2, (df_biomass_soft_7_mean.iloc[:, 1] - df_biomass_soft_7_std.iloc[:, 1]) ,
                     (df_biomass_soft_7_mean.iloc[:, 1] + df_biomass_soft_7_std.iloc[:, 1]) , color="lightgrey", alpha=0.3)
     plt.title("Softwood", fontsize=18)
-    plt.ylabel('Wood (m3/ha)')
+    plt.ylabel('Wood (m3/ha/year)')
     plt.title("Softwood", fontsize = 18)
     ax = plt.subplot(2, 2, 2)
     # plt.xlim(2025,2305)
@@ -918,7 +767,7 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1, df_ha
     plt.plot(x2, df_biomass_soft_7_mean.iloc[:, 3] , label="RCP 4.5 - ABOVE ", lw=2, ls=ls_styles[1], color=colors[1])
     plt.fill_between(x2, (df_biomass_soft_7_mean.iloc[:, 3] - df_biomass_soft_7_std.iloc[:, 3]) ,
                     (df_biomass_soft_7_mean.iloc[:, 3] + df_biomass_soft_7_std.iloc[:, 3]) , color="lightgrey", alpha=0.3)
-    plt.ylabel('Wood (m3/ha)')
+    plt.ylabel('Wood (m3/ha/year)')
     plt.xlabel('Year')
     ax =plt.subplot(2, 2, 4)
     # plt.xlim(2025,2305)
@@ -1094,9 +943,9 @@ def process_combination(args):
 
     # Calculate total area for normalization in the next plot
     if not summaries.empty:
-        areas = summaries.groupby(["stand", "Above1000m"])["sim_area (m2)"].mean().groupby("Above1000m").sum().to_dict()
+        areas = summaries.groupby(["stand", "Above1000m"])["area"].mean().groupby("Above1000m").sum().to_dict()
         total_area = sum(areas.values())
-
+        pdb.set_trace()
         df_biomass_soft_1_grouped = df_soft_1.groupby(['year'])[[
             'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
         df_biomass_hard_1_grouped = df_hard_1.groupby(['year'])[[
@@ -1113,10 +962,9 @@ def process_combination(args):
             df_biomass_soft_7_grouped.copy(),
             df_biomass_hard_7_grouped.copy(),
             total_area,
-            show=show, save=save
+            show=show, 
+            save=save
         )
-    # print("Plotting biomass for sawmill categories as scatter plot...")
-    # plot_biomass_for_sawmill_categories(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), show=show, save=save)
 
     print("Plotting normalized biomass for sawmill categories and altitudes...")
     plot_normalized_biomass_for_sawmill_categories_and_altitues(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), areas, show=show, save=save)
