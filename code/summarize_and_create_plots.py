@@ -216,15 +216,15 @@ def preprocess_data(df, management_scenario, stand_simtype_count = None, time_cu
         else:
             print(f"Warning: Column '{col}' not found, skipping float conversion.")
     
-    if stand_simtype_count is not None:
-        # Create a column with the count for each (stand, simtype) pair
-        summaries['pair_count'] = summaries.apply(lambda row: stand_simtype_count[(row['stand'], row['simtype'])], axis=1)
+    # if stand_simtype_count is not None:
+    #     # Create a column with the count for each (stand, simtype) pair
+    #     summaries['pair_count'] = summaries.apply(lambda row: stand_simtype_count[(row['stand'], row['simtype'])], axis=1)
 
-        # Divide all numeric columns (except for stand, simtype, pair_count) by the pair count 
-        summaries[cols_to_float] = summaries[cols_to_float].div(summaries['pair_count'], axis=0)
+    #     # Divide all numeric columns (except for stand, simtype, pair_count) by the pair count 
+    #     summaries[cols_to_float] = summaries[cols_to_float].div(summaries['pair_count'], axis=0)
 
-        # Drop the helper column
-        summaries.drop(columns='pair_count', inplace=True)
+    #     # Drop the helper column
+    #     summaries.drop(columns='pair_count', inplace=True)
 
     # rename the column of summaries "Gruppierungsmerkmal" as "year"
     summaries.rename(columns={"Gruppierungsmerkmal": "year"}, inplace=True)
@@ -233,30 +233,33 @@ def preprocess_data(df, management_scenario, stand_simtype_count = None, time_cu
     # drop the rows that have "year", (i.e.,"Gruppierungsmerkmal")larger than time_cut
     summaries = summaries[summaries["year"]< time_cut]
 
-    
+    # we know create a weighting columns to rescale the assortments based on the rules used in ForClim simulations
     if management_scenario == "BIO":
-        # add columns called weight with value 1.0
-        summaries["weight"] = summaries["planting"].apply(lambda x: 0.9 if not x else 0.1)
+        # eight = 1.0 as there is no planting in BIO
+        summaries["weight"] = 1
     if management_scenario != "BIO":
         # add columns called weight with value 0.9 if planting is False, 0.1 otherwise
         summaries["weight"] = np.where(summaries["planting"], 0.1, 0.9)
-        # count the number of unique species per (stand, simtype) pair when plating is true
-        mask = summaries['planting']
+        # count the number of unique species per (stand, simtype) pair - we could also use the defaultdict
         species_count = (
-            summaries[mask].groupby(['stand', 'simtype'])['planted_species']
+            summaries.groupby(['stand', 'simtype'])['planted_species']
             .nunique()
             .reset_index(name='species_count')
         )
         # merge the species_count back to summaries
         summaries = summaries.merge(species_count, on=['stand', 'simtype'], how='left', copy=False)
-        # divide the weight by (species_count - 1) if planting is True
+        # If the species count was exactly 1, we put wright 1  
+        summaries.loc[summaries['species_count']==1, 'weight'] = 1
+        # If the species count is larger than 1 and planting is True, we divide 0.1 by species_count-1
         mask = summaries['planting']
-        summaries.loc[mask, 'weight'] /= summaries.loc[mask, 'species_count']
+        summaries.loc[mask*summaries['species_count']>1, 'weight'] /= summaries.loc[mask, 'species_count']-1
+        # If the species count is larger than 1 and planting is False, we keep 0.9 initialized
 
         # drop the species_count column
         summaries.drop(columns=['species_count'], inplace=True)
-        # drop the planting column
-        summaries = summaries.drop(columns=["planting"])
+    # drop the planting column
+    summaries = summaries.drop(columns=["planting"])
+
     
     # multiply the weight by the value in the "Volumen OR [m3]"  and "Volumen IR [m3]" columns
     summaries["Volumen OR [m3]"] = summaries["Volumen OR [m3]"] * summaries["weight"]
@@ -516,7 +519,7 @@ def plot_biomass(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=Tr
     plt.plot(df_hard_1.groupby(['year'])["Volumen OR [m3]"].sum().index,
              df_hard_1.groupby(['year'])["Volumen OR [m3]"].sum().values, label="hardwood")
     plt.xlabel('Year')
-    #plt.yscale('log')
+    plt.yscale('log')
     #plt.xlim(2010, 2310)
     plt.title('RCP 8.5 - Total Biomass')
     plt.legend()
@@ -526,7 +529,7 @@ def plot_biomass(df_soft_1, df_hard_1, df_soft_7, df_hard_7, show=False, save=Tr
              df_soft_7.groupby(['year'])["Volumen OR [m3]"].sum().values, label="softwood")
     plt.plot(df_hard_7.groupby(['year'])["Volumen OR [m3]"].sum().index,
              df_hard_7.groupby(['year'])["Volumen OR [m3]"].sum().values, label="hardwood")
-    #plt.yscale('log')
+    plt.yscale('log')
     # plt.xlim(2010, 2310)
     plt.xlabel('Year')
     plt.title('RCP 4.5 - Total Biomass')
