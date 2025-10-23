@@ -39,7 +39,7 @@ def run_sorsim(file, output_folder_path, management_scenario, failed, save_inter
     """
     if file in failed:
         return  # Skip failed files
-    stand, simtype = parse_filename(file, management_scenario)
+    stand, simtype = parse_filename(file, case_study, management_scenario)
     command = (f"python ../minimal/run_sorsim.py ../minimal/sorsim/SorSim4Python.jar "
                f"{output_folder_path}/intermediate/{management_scenario}/deadCohorts{stand}_{simtype}.csv "
                f"{output_folder_path}/outputs/{management_scenario}/sorsim_output{stand}_{simtype}.csv 6 True")
