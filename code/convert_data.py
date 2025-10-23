@@ -69,7 +69,7 @@ def process_files(files, input_folder_path, output_folder_path, management_scena
         if sample == "True":
             sample_size = min(len(files), 10)
             files = files[:sample_size]
-
+        
         # Step 1: Convert ForClim Output in Parallel
         with Pool(processes=num_cores) as pool:
             pool.starmap(convert_forclim, [(file, input_folder_path, output_folder_path, management_scenario, failed) for file in files])
@@ -84,18 +84,28 @@ def process_files(files, input_folder_path, output_folder_path, management_scena
 
 def parse_filename(filename, management_scenario):
     """Extracts stand and simtype from the filename."""
-    if management_scenario == "bio":
+    if management_scenario == "BIO":
         stand, simtype = filename.split("_")
         stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
         simtype = simtype.split(".")[0]  # Extract first letter of simtype
         return stand, simtype
-    else: # we also have the code of the planted species in the filename
+    elif management_scenario != "plantations": 
+        # we also have the code of the planted species in the filename
         # e.g. of the file name is dataSim.dead10_1_planted_01.csv.gz,
         # dataSim.dead<standnumber>_<simtype>_planted_<speciescode>.csv.gz
         stand, simtype, _, species = filename.split("_")
         stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
         species = species.split(".")[0]  # Extract the species code 
         return stand, simtype + "_planted_" + species
+    else:
+        # we have different coding for the names of the files
+        # dataSim.dead<casestudy>_<standnumber>_<speciesname>_<simtype>.csv
+        # e.g., dataSim.deadEntlebuch_2_AAlb_1.csv
+        _, stand, _ = filename.split(".")
+        stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
+        simtype = stand[-1]
+        stand = stand[:-1]
+        return stand, simtype
 
 
 def compress_file(stand, simtype, output_folder_path, management_scenario):
@@ -139,6 +149,8 @@ def process_combination(cs, ms, input_folder_path, output_folder_path, num_cores
     files = get_files_in_folder(input_folder_path)
     print("We have", len(files), "files to be processed (if sample == True, then only 40)")
     
+    #keep only files that have the 
+
     failed_files = process_files(
         files,
         input_folder_path,
@@ -169,7 +181,7 @@ if __name__ == "__main__":
     print("Using a sample ", use_sample)
     print("Save intermediate files as zip ", save_intermediate)
     # check that the argument is valid
-    valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL"]
+    valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL", "BIO"]
     valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All"]
     if case_study not in valid_case_studies:
         raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
@@ -186,8 +198,10 @@ if __name__ == "__main__":
 
     for cs in case_studies_to_run:
         for ms in scenarios_to_run:
-            input_folder_path = f"/cluster/work/climate/amauri/{cs}/Results/mgmt_{ms}/dead.trees/"
-            output_folder_path = f"/cluster/scratch/giacomov/mainwood/{cs}/"
+            #input_folder_path = f"/cluster/work/climate/amauri/{cs}/Results/mgmt_{ms}/dead.trees/"
+            #output_folder_path = f"/cluster/scratch/giacomov/mainwood/{cs}/"
+            input_folder_path = f"../data/{cs}/inputs/{ms}/"
+            output_folder_path = f"../data/{cs}/"
             failed = process_combination(
                 cs, ms, 
                 input_folder_path, 
