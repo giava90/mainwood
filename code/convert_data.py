@@ -4,6 +4,7 @@ import zipfile
 import sys
 import datetime as dt
 from multiprocessing import Pool, Manager
+import re
 
 def get_files_in_folder(folder_path):
     """Returns a list of file names in the specified folder."""
@@ -67,7 +68,7 @@ def process_files(files, input_folder_path, output_folder_path, management_scena
         failed = manager.list()
 
         if sample == "True":
-            sample_size = min(len(files), 10)
+            sample_size = min(len(files), 100)
             files = files[:sample_size]
         
         # Step 1: Convert ForClim Output in Parallel
@@ -89,23 +90,36 @@ def parse_filename(filename, management_scenario):
         stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
         simtype = simtype.split(".")[0]  # Extract first letter of simtype
         return stand, simtype
-    elif management_scenario != "plantations": 
-        # we also have the code of the planted species in the filename
-        # e.g. of the file name is dataSim.dead10_1_planted_01.csv.gz,
-        # dataSim.dead<standnumber>_<simtype>_planted_<speciescode>.csv.gz
-        stand, simtype, _, species = filename.split("_")
-        stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
-        species = species.split(".")[0]  # Extract the species code 
-        return stand, simtype + "_planted_" + species
     else:
-        # we have different coding for the names of the files
-        # dataSim.dead<casestudy>_<standnumber>_<speciesname>_<simtype>.csv
-        # e.g., dataSim.deadEntlebuch_2_AAlb_1.csv
-        _, stand, _ = filename.split(".")
-        stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
-        simtype = stand[-1]
-        stand = stand[:-1]
-        return stand, simtype
+        pattern = re.compile(r"dataSim\.dead(?:Entlebuch)?(\d+|_?\d+)(_.*)")
+        match = pattern.search(filename)
+        if match:
+            stand = match.group(1).lstrip("_")  # remove leading underscore if any
+            simtype = match.group(2)
+            if simtype[-3:]== ".gz":
+                simtype = simtype[1:-7]
+            else:
+                simtype = simtype[1:-2]
+
+            print(f"File: {filename}\n  stand = {stand}\n  simtype = {simtype}\n")
+            return stand, simtype
+    # elif management_scenario != "plantations": 
+    #     # we also have the code of the planted species in the filename
+    #     # e.g. of the file name is dataSim.dead10_1_planted_01.csv.gz,
+    #     # dataSim.dead<standnumber>_<simtype>_planted_<speciescode>.csv.gz
+    #     stand, simtype, _, species = filename.split("_")
+    #     stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
+    #     species = species.split(".")[0]  # Extract the species code 
+    #     return stand, simtype + "_planted_" + species
+    # else:
+    #     # we have different coding for the names of the files
+    #     # dataSim.dead<casestudy>_<standnumber>_<speciesname>_<simtype>.csv
+    #     # e.g., dataSim.deadEntlebuch_2_AAlb_1.csv
+    #     _, stand, _ = filename.split(".")
+    #     stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
+    #     simtype = stand[-1]
+    #     stand = stand[:-1]
+    #     return stand, simtype
 
 
 def compress_file(stand, simtype, output_folder_path, management_scenario):
