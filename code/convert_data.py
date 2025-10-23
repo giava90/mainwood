@@ -24,8 +24,8 @@ def run_command(command):
         print("STDERR:", e.stderr)
         return False
 
-def convert_forclim(file, input_folder_path, output_folder_path, management_scenario, failed):
-    stand, simtype = parse_filename(file, management_scenario)
+def convert_forclim(file, input_folder_path, output_folder_path, case_study, management_scenario, failed):
+    stand, simtype = parse_filename(file, case_study, management_scenario)
     command = (f"python ../minimal/output_input_converter.py {input_folder_path} {file} "
                f"{output_folder_path}/intermediate/{management_scenario}/ "
                f"deadCohorts{stand}_{simtype}.csv True")
@@ -51,13 +51,14 @@ def run_sorsim(file, output_folder_path, management_scenario, failed, save_inter
         file_path = f"{output_folder_path}/intermediate/{management_scenario}/deadCohorts{stand}_{simtype}.csv"
         os.remove(file_path)
 
-def process_files(files, input_folder_path, output_folder_path, management_scenario, num_cores=4, sample=False, save_intermediate = False):
+def process_files(files, input_folder_path, output_folder_path, case_study, management_scenario, num_cores=4, sample=False, save_intermediate = False):
     """Converts ForClim output and runs SorSim for each file in parallel using multiprocessing.
     
     Args:        
         files (list): List of file names to process.
         input_folder_path (str): Path to the input folder containing ForClim output files.
         output_folder_path (str): Path to the output folder for SorSim results.
+        case_study (str): Case study to be used.
         management_scenario (str): Management scenario to be used in processing.
         num_cores (int): Number of CPU cores to use for parallel processing.
         sample (bool): Whether to use a sample of the files for processing.
@@ -73,7 +74,7 @@ def process_files(files, input_folder_path, output_folder_path, management_scena
         
         # Step 1: Convert ForClim Output in Parallel
         with Pool(processes=num_cores) as pool:
-            pool.starmap(convert_forclim, [(file, input_folder_path, output_folder_path, management_scenario, failed) for file in files])
+            pool.starmap(convert_forclim, [(file, input_folder_path, output_folder_path, case_study, management_scenario, failed) for file in files])
 
         # Step 2: Run SorSim in Parallel
         with Pool(processes=num_cores) as pool:
@@ -83,7 +84,7 @@ def process_files(files, input_folder_path, output_folder_path, management_scena
 
 
 
-def parse_filename(filename, management_scenario):
+def parse_filename(filename, case_study, management_scenario):
     """Extracts stand and simtype from the filename."""
     if management_scenario == "BIO":
         stand, simtype = filename.split("_")
@@ -91,7 +92,10 @@ def parse_filename(filename, management_scenario):
         simtype = simtype.split(".")[0]  # Extract first letter of simtype
         return stand, simtype
     else:
-        pattern = re.compile(r"dataSim\.dead(?:Entlebuch)?(\d+|_?\d+)(_.*)")
+        pattern = r"dataSim\.dead(?:" 
+        pattern += re.escape(case_study)
+        pattern += r")?(\d+|_?\d+)(_.*)"
+        pattern = re.compile(pattern)
         match = pattern.search(filename)
         if match:
             stand = match.group(1).lstrip("_")  # remove leading underscore if any
@@ -100,28 +104,8 @@ def parse_filename(filename, management_scenario):
                 simtype = simtype[1:-7]
             else:
                 simtype = simtype[1:-2]
-
-            print(f"File: {filename}\n  stand = {stand}\n  simtype = {simtype}\n")
             return stand, simtype
-    # elif management_scenario != "plantations": 
-    #     # we also have the code of the planted species in the filename
-    #     # e.g. of the file name is dataSim.dead10_1_planted_01.csv.gz,
-    #     # dataSim.dead<standnumber>_<simtype>_planted_<speciescode>.csv.gz
-    #     stand, simtype, _, species = filename.split("_")
-    #     stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
-    #     species = species.split(".")[0]  # Extract the species code 
-    #     return stand, simtype + "_planted_" + species
-    # else:
-    #     # we have different coding for the names of the files
-    #     # dataSim.dead<casestudy>_<standnumber>_<speciesname>_<simtype>.csv
-    #     # e.g., dataSim.deadEntlebuch_2_AAlb_1.csv
-    #     _, stand, _ = filename.split(".")
-    #     stand = stand.split(".")[-1][4:]  # Extract numeric stand ID
-    #     simtype = stand[-1]
-    #     stand = stand[:-1]
-    #     return stand, simtype
-
-
+  
 def compress_file(stand, simtype, output_folder_path, management_scenario):
     """Compresses and removes the intermediate CSV file."""
     file_path = f"{output_folder_path}/intermediate/{management_scenario}/deadCohorts{stand}_{simtype}.csv"
@@ -169,6 +153,7 @@ def process_combination(cs, ms, input_folder_path, output_folder_path, num_cores
         files,
         input_folder_path,
         output_folder_path,
+        cs,
         ms,
         num_cores=num_cores,
         sample=use_sample,
