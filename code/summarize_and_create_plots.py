@@ -1228,6 +1228,7 @@ def process_combination(args):
             show=show, 
             save=save
         )
+    summaries.to_csv(f"../data/summaries_for_plots/{case_study}_{management}.csv")
     summaries = summaries[summaries["simtype"] == '1']
     # by diameter
     plot_biomass_by_diameter_class(summaries.copy(), show=show, save=save, percent=True, plantation_separate=True, fname='8_5_all_years')
