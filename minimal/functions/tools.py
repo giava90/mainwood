@@ -125,7 +125,7 @@ def output_input_converter(data_out_ForClim, dead_cohorts = False, only_harveste
     data_out_ForClim_as_in_SorSim['Baumart-Code'] = data_out_ForClim_as_in_SorSim['FullLatinName'].map(ForClim_species_to_Baumart_Code)
     # add colum Baumart to the data_out_ForClim_as_in_SorSim
     data_out_ForClim_as_in_SorSim['Baumart'] = data_out_ForClim_as_in_SorSim['FullLatinName'].map(species_mapping)
-    data_out_ForClim_as_in_SorSim.tail()
+    #data_out_ForClim_as_in_SorSim.tail()
     # we add one emptycolumn D7m
     data_out_ForClim_as_in_SorSim['D7m'] = 0
     # we change the name of the "run" column to "Beschrieb"
