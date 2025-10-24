@@ -32,7 +32,7 @@ def convert_forclim(file, input_folder_path, output_folder_path, case_study, man
     if not run_command(command):
         failed.append(file)  # Store failed file
 
-def run_sorsim(file, output_folder_path, management_scenario, failed, save_intermediate=False):
+def run_sorsim(file, output_folder_path, case_study, management_scenario, failed, save_intermediate=False):
     """ Running the SorSim script.
     Args:
 
@@ -69,7 +69,7 @@ def process_files(files, input_folder_path, output_folder_path, case_study, mana
         failed = manager.list()
 
         if sample == "True":
-            sample_size = min(len(files), 100)
+            sample_size = min(len(files), 50)
             files = files[:sample_size]
         
         # Step 1: Convert ForClim Output in Parallel
@@ -78,7 +78,7 @@ def process_files(files, input_folder_path, output_folder_path, case_study, mana
 
         # Step 2: Run SorSim in Parallel
         with Pool(processes=num_cores) as pool:
-            pool.starmap(run_sorsim, [(file, output_folder_path, management_scenario, failed, save_intermediate) for file in files])
+            pool.starmap(run_sorsim, [(file, output_folder_path, case_study, management_scenario, failed, save_intermediate) for file in files])
 
         return list(failed)
 
