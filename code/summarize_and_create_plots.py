@@ -300,19 +300,20 @@ def augment_with_stand_data(summaries, stand_data):
     for stand in summaries["stand"].unique():
         if int(stand) not in stand_data["fsID"].values:
             print(f"Stand {stand} not found in stand data")
-
-    stand_to_else = stand_data[["fsID", "Above1000m", "n.patches", "area"]].copy()
+    #stand_to_else = stand_data[["fsID", "Above1000m", "n.patches", "area"]].copy()
+    stand_to_else = stand_data[["fsID", "area_ha"]].copy()
     stand_to_else.index = stand_to_else["fsID"].astype(str)
     stand_to_else = stand_to_else.drop(columns=["fsID"])
     stand_to_else_dict = stand_to_else.to_dict()
 
     # Adding area and altitude to summaries
-    summaries["Above1000m"] = summaries["stand"].astype(str).map(stand_to_else_dict["Above1000m"])
+    # summaries["Above1000m"] = summaries["stand"].astype(str).map(stand_to_else_dict["Above1000m"])
+    summaries["Above1000m"] = np.random.sample(summaries.shape[0])>0.5
     # computing the simulated area
     #summaries["sim_area (m2)"] = summaries["stand"].astype(str).map(stand_to_else_dict["n.patches"]) * 625
     # the simulated area is always 100 patches of 625m2 each
     summaries["sim_area (m2)"] = 100 * 625
-    summaries["area"] = summaries["stand"].astype(str).map(stand_to_else_dict["area"])
+    summaries["area"] = summaries["stand"].astype(str).map(stand_to_else_dict["area_ha"])
     # rescaling the volume according to the actual size of the stand
     # in the simulations, we have 100 patches of 625 m2 each
     # however, the actual area of the stand is different and saved in "area" column
@@ -577,7 +578,7 @@ def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass
         save (bool, optional): Whether to save the plot. Defaults to True.
     """
     # Normalizing the volume by total area in ha
-    norm_factor = total_area / 10**4
+    norm_factor = total_area 
     df_biomass_soft_1_norm = df_biomass_soft_1 / norm_factor
     df_biomass_hard_1_norm = df_biomass_hard_1 / norm_factor
     df_biomass_soft_7_norm = df_biomass_soft_7 / norm_factor
@@ -671,7 +672,7 @@ def plot_normalized_biomass_for_sawmill_categories(df_biomass_soft_1, df_biomass
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def plot_normalized_biomass_for_sawmill_categories_and_altitues(df, show=False, save=True, fname="all", normalize_by_area_and_year=False):
+def plot_normalized_biomass_for_sawmill_categories_and_altitues(s, show=False, save=True, fname="all", normalize_by_area_and_year=False):
     """
     Create a 2x2 grid of line plots showing wood volume ('Volumen OR [m3]')
     by year, for softwood vs hardwood and above/below 1000 m elevation.
@@ -686,10 +687,11 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues(df, show=False, 
     save : bool, optional
         If True, save the plot as 'wood_volume_2x2.png'. Default is True.
     """
+    df = s.copy()
     if normalize_by_area_and_year:
         if 'area' not in df.columns:
             raise ValueError("Column 'area' is required when normalize_by_area_and_year=True.")
-        df['Volumen OR [m3]'] = df['Volumen OR [m3]'] / df['area'] *10000
+        df['Volumen OR [m3]'] = df['Volumen OR [m3]'] / df['area']
         year_max = df['year'].max()
         year_min = df['year'].min()
         df['Volumen OR [m3]'] /= year_max - year_min
@@ -818,7 +820,7 @@ def plot_normalized_biomass_for_sawmill_categories_and_altitues_old(df_soft_1, d
 
 
     # normalizing the volumen by total area in ha
-    norm_factor = np.array([areas[0], areas[1], areas[0], areas[1]]) / 10**4
+    norm_factor = np.array([areas[0], areas[1], areas[0], areas[1]]) 
     try:
         df_biomass_soft_1 = df_biomass_soft_1 / norm_factor
         df_biomass_hard_1 = df_biomass_hard_1 / norm_factor
@@ -993,7 +995,7 @@ def plot_percentages_of_wood_quality(df_soft, df_hard, save=True, show=False, fn
     if show:
         plt.show()
 
-def plot_percentages_of_wood(df, save=True, show=False, fname = "all", percent=True, plantation_separate=True):
+def plot_percentages_of_wood(s, save=True, show=False, fname = "all", percent=True, plantation_separate=True):
     """
     Plots a stacked bar chart of wood quality as a percentage of total wood.
 
@@ -1004,6 +1006,7 @@ def plot_percentages_of_wood(df, save=True, show=False, fname = "all", percent=T
     fname (str): Filename prefix for saving the plot.
     percent (bool): If True, plot percentages; if False, plot absolute values.
     """
+    df = s.copy()
     if plantation_separate == True:
         # total plantation volume per year
         plantations = (
@@ -1065,10 +1068,11 @@ def plot_percentages_of_wood(df, save=True, show=False, fname = "all", percent=T
     if show:
         plt.show()
 
-def plot_biomass_by_diameter_class(df, show=False, save=True, fname = "all", percent=True, plantation_separate = True):
+def plot_biomass_by_diameter_class(s, show=False, save=True, fname = "all", percent=True, plantation_separate = True):
     """
     We divide the biomass into three diameter classes: <20cm, 20-40cm, >40cm; and bewteen softwood and hardwood
     """
+    df = s.copy()
     if plantation_separate == True:
         # total plantation volume per year
         plantations = (
@@ -1196,81 +1200,81 @@ def process_combination(args):
     else:
         print("Warning: Summaries DataFrame is empty or quality mapping is not available. Skipping sawmill biomass calculation.")
 
-    # --- Splitting Data for Plotting ---
-    df_soft_1 = summaries[(summaries["simtype"] == "1") & (summaries["is_soft"] == True)].copy()
-    df_hard_1 = summaries[(summaries["simtype"] == "1") & (summaries["is_hard"] == True)].copy()
-    df_soft_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_soft"] == True)].copy()
-    df_hard_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_hard"] == True)].copy()
-    # --- Plotting ---
-    print("Plotting total biomass...")
-    plot_biomass(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), show=show, save=save)
-
-    # Calculate total area for normalization in the next plot
-    if not summaries.empty:
-        areas = summaries.groupby(["stand", "Above1000m"])["area"].mean().groupby("Above1000m").sum().to_dict()
-        total_area = sum(areas.values())
-        df_biomass_soft_1_grouped = df_soft_1.groupby(['year'])[[
-            'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-        df_biomass_hard_1_grouped = df_hard_1.groupby(['year'])[[
-            'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-        df_biomass_soft_7_grouped = df_soft_7.groupby(['year'])[[
-            'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-        df_biomass_hard_7_grouped = df_hard_7.groupby(['year'])[[
-            'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-
-        print("Plotting normalized biomass for sawmill categories with rolling stats...")
-        plot_normalized_biomass_for_sawmill_categories(
-            df_biomass_soft_1_grouped.copy(),
-            df_biomass_hard_1_grouped.copy(),
-            df_biomass_soft_7_grouped.copy(),
-            df_biomass_hard_7_grouped.copy(),
-            total_area,
-            show=show, 
-            save=save
-        )
     summaries.to_csv(f"../data/summaries_for_plots/{case_study}_{management}.csv")
     summaries = summaries[summaries["simtype"] == '1']
     # by diameter
-    plot_biomass_by_diameter_class(summaries.copy(), show=show, save=save, percent=True, plantation_separate=True, fname='8_5_all_years')
-    plot_biomass_by_diameter_class(summaries.copy(), show=show, save=save, percent=True, plantation_separate=False, fname='8_5_all_years')
-    plot_biomass_by_diameter_class(summaries.copy(), show=show, save=save, percent=False, plantation_separate=True, fname='8_5_all_years')
-    plot_biomass_by_diameter_class(summaries.copy(), show=show, save=save, percent=False, plantation_separate=False, fname='8_5_all_years')
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname='8_5_all_years')
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=False, fname='8_5_all_years')
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname='8_5_all_years')
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=False, fname='8_5_all_years')
     # 
     print("Plotting percentages of wood quality as stacked bars...")
-    plot_percentages_of_wood(summaries.copy(), save = True, show= False,fname ="8_5_all_years" )
-    plot_percentages_of_wood(summaries.copy(), save = True, show= False,fname ="8_5_all_years", plantation_separate=False)
+    plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5_all_years" )
+    plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5_all_years", plantation_separate=False)
     print("Plotting total of wood quality as stacked bars...")
-    plot_percentages_of_wood(summaries.copy(), save = True, show= False, fname ="8_5_all_years", percent=False)
-    plot_percentages_of_wood(summaries.copy(), save = True, show= False, fname ="8_5_all_years", percent=False, plantation_separate=False)
+    plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5_all_years", percent=False)
+    plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5_all_years", percent=False, plantation_separate=False)
     # drop the rows that have "year", (i.e.,"Gruppierungsmerkmal")larger than time_cut
     time_cut = 2160
     summaries = summaries[summaries["year"]< time_cut]
-    plot_biomass_by_diameter_class(summaries.copy(), show=show, save=save, percent=True, plantation_separate=True, fname='8_5')
-    plot_biomass_by_diameter_class(summaries.copy(), show=show, save=save, percent=True, plantation_separate=False, fname='8_5')
-    plot_biomass_by_diameter_class(summaries.copy(), show=show, save=save, percent=False, plantation_separate=True, fname='8_5')
-    plot_biomass_by_diameter_class(summaries.copy(), show=show, save=save, percent=False, plantation_separate=False, fname='8_5')
-    plot_percentages_of_wood(summaries.copy(), save = True, show= False,fname ="8_5" )
-    plot_percentages_of_wood(summaries.copy(), save = True, show= False,fname ="8_5", plantation_separate=False)
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname='8_5')
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=False, fname='8_5')
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname='8_5')
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=False, fname='8_5')
+    plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5" )
+    plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5", plantation_separate=False)
     print("Plotting total of wood quality as stacked bars...")
-    plot_percentages_of_wood(summaries.copy(), save = True, show= False, fname ="8_5", percent=False)
-    plot_percentages_of_wood(summaries.copy(), save = True, show= False, fname ="8_5", percent=False, plantation_separate=False)
+    plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5", percent=False)
+    plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5", percent=False, plantation_separate=False)
     
-    plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries.copy(), save = True, show= False, fname ="8_5")
-    plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries.copy(), save = True, show= False, fname ="8_5", normalize_by_area_and_year=True)
-
-
-    # normalized 
-    print("Plotting percentages of wood quality as stacked bars...")
-    plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5" )
-    # plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5")
-    print("Plotting total of wood quality as stacked bars...")
-    plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5", percent=False)
-    # plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5", percent=False)
-    #print("Plotting normalized biomass for sawmill categories and altitudes...")
-    #plot_normalized_biomass_for_sawmill_categories_and_altitues_old(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), areas, show=show, save=save)
+    # plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries, save = True, show= False, fname ="8_5")
+    # plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries, save = True, show= False, fname ="8_5", normalize_by_area_and_year=True)
 
     print("All plots generated successfully.")
     print("Time taken:", dt.datetime.now() - start_time)
+
+    # --- Splitting Data for Plotting ---
+    # df_soft_1 = summaries[(summaries["simtype"] == "1") & (summaries["is_soft"] == True)].copy()
+    # df_hard_1 = summaries[(summaries["simtype"] == "1") & (summaries["is_hard"] == True)].copy()
+    # df_soft_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_soft"] == True)].copy()
+    # df_hard_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_hard"] == True)].copy()
+    # # --- Plotting ---
+    # print("Plotting total biomass...")
+    # plot_biomass(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), show=show, save=save)
+
+    # # Calculate total area for normalization in the next plot
+    # if not summaries.empty:
+    #     areas = summaries.groupby(["stand", "Above1000m"])["area"].mean().groupby("Above1000m").sum().to_dict()
+    #     total_area = sum(areas.values())
+    #     df_biomass_soft_1_grouped = df_soft_1.groupby(['year'])[[
+    #         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
+    #     df_biomass_hard_1_grouped = df_hard_1.groupby(['year'])[[
+    #         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
+    #     df_biomass_soft_7_grouped = df_soft_7.groupby(['year'])[[
+    #         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
+    #     df_biomass_hard_7_grouped = df_hard_7.groupby(['year'])[[
+    #         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
+
+    #     print("Plotting normalized biomass for sawmill categories with rolling stats...")
+    #     plot_normalized_biomass_for_sawmill_categories(
+    #         df_biomass_soft_1_grouped.copy(),
+    #         df_biomass_hard_1_grouped.copy(),
+    #         df_biomass_soft_7_grouped.copy(),
+    #         df_biomass_hard_7_grouped.copy(),
+    #         total_area,
+    #         show=show, 
+    #         save=save
+    #     )
+
+    # # normalized 
+    # print("Plotting percentages of wood quality as stacked bars...")
+    # plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5" )
+    # # plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5")
+    # print("Plotting total of wood quality as stacked bars...")
+    # plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5", percent=False)
+    # # plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5", percent=False)
+    # #print("Plotting normalized biomass for sawmill categories and altitudes...")
+    # #plot_normalized_biomass_for_sawmill_categories_and_altitues_old(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), areas, show=show, save=save)
 
 
 if __name__ == "__main__":
