@@ -944,9 +944,9 @@ def plot_percentages_of_wood_quality(df_soft, df_hard, save=True, show=False, fn
     """
 
     df_biomass_soft = df_soft.groupby(['year'])[[
-        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
+        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().astype(float).fillna(0)
     df_biomass_hard = df_hard.groupby(['year'])[[
-        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
+        'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().astype(float).fillna(0)
     # join the two date frames by the 'year'
     # add _soft and _hard to the corresponging columns
     df = df_biomass_soft.join(df_biomass_hard, lsuffix='_soft', rsuffix='_hard', how='outer').fillna(0)
@@ -1017,8 +1017,8 @@ def plot_percentages_of_wood(s, save=True, show=False, fname = "all", percent=Tr
         df = df.query("plantation == False")
         fname = "plantation_separate_"+fname
 
-    df_biomass_soft = df.query("is_soft == True").groupby(['year'])['Volumen OR [m3]'].sum().fillna(0).to_frame()
-    df_biomass_hard = df.query("is_hard == True").groupby(['year'])['Volumen OR [m3]'].sum().fillna(0).to_frame()
+    df_biomass_soft = df.query("is_soft == True").groupby(['year'])['Volumen OR [m3]'].sum().astype(float).fillna(0).to_frame()
+    df_biomass_hard = df.query("is_hard == True").groupby(['year'])['Volumen OR [m3]'].sum().astype(float).fillna(0).to_frame()
     # join the two date frames by the 'year'
     # add _soft and _hard to the corresponging columns
     df = df_biomass_soft.join(df_biomass_hard, lsuffix='_soft', rsuffix='_hard', how='outer').fillna(0)
@@ -1027,7 +1027,7 @@ def plot_percentages_of_wood(s, save=True, show=False, fname = "all", percent=Tr
     # setting order
     col_order = ['Softwood', 'Hardwood']
     if plantation_separate == True:
-         df = df.join(plantations, how='left').fillna(0)
+         df = df.join(plantations, how='left').astype(float).fillna(0)
          col_order = ['Plantation'] + col_order
     df = df[col_order]
     # sum the rows by gruop of 10 (i.e., aggregate the rows by 10 years)
@@ -1083,7 +1083,7 @@ def plot_biomass_by_diameter_class(s, show=False, save=True, fname = "all", perc
         df = df.query("plantation == False")
         fname = "plantation_separate_"+fname
 
-    df = df.groupby(['year', 'diameter_class', 'is_soft', 'is_hard'])[["Volumen OR [m3]"]].sum().fillna(0)
+    df = df.groupby(['year', 'diameter_class', 'is_soft', 'is_hard'])[["Volumen OR [m3]"]].sum().astype(float).fillna(0)
     df = df.unstack(level=[1,2,3]).fillna(0)
     df.columns = [ '20-40cm - Hardwood', '20-40cm - Softwood', 
                   '<20cm - Hardwood', '<20cm - Softwood',
@@ -1091,7 +1091,7 @@ def plot_biomass_by_diameter_class(s, show=False, save=True, fname = "all", perc
     # changing columns orders
     col_order = ['<20cm - Softwood', '20-40cm - Softwood', '>40cm - Softwood', '<20cm - Hardwood', '20-40cm - Hardwood', '>40cm - Hardwood']
     if plantation_separate == True:
-        df = df.join(plantations, how='left').fillna(0)
+        df = df.join(plantations, how='left').astype(float).fillna(0)
         col_order =['Plantation'] + col_order
     df = df[col_order]
     # sum the rows by gruop of 10 (i.e., aggregate the rows by 10 years)
