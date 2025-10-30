@@ -1283,7 +1283,7 @@ if __name__ == "__main__":
     print("The sample size is ", sample_size)
     # check that the argument is valid
     valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL", "BIO"]
-    valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All"]
+    valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "Misox", "All"]
     if case_study_input not in valid_case_studies:
         raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
     if management_input not in valid_management_scenarios:
