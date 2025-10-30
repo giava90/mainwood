@@ -91,7 +91,7 @@ def load_data(folder_path, management_scenario):
                 print(f"Warning: Error reading file {file}: {e}")
     return df
 
-def load_data_parallel(folder_path, management_scenario, sample=False, num_cores=1, batch_size=500):
+def load_data_parallel(folder_path, management_scenario, sample=False, num_cores=1, batch_size=500, chunk_size=None):
     """
     Efficiently reads and combines data from CSV files in parallel using multiprocessing.
 
@@ -118,24 +118,25 @@ def load_data_parallel(folder_path, management_scenario, sample=False, num_cores
         files = np.random.choice(files, size=sample_size, replace=False)
 
     args = [(folder_path, f, management_scenario) for f in files]
-
+    if chunk_size is None:
+        chunk_size = min(int(len(files)/num_cores), 200)
     with Pool(num_cores) as pool:
-        results = pool.imap_unordered(process_file, args)
+        results_iterator = pool.imap_unordered(process_file, args, chunksize=chunk_size)
 
-    #  results = [df for df in results if df is not None]
-    data_frames = []
-    batch=[]
-    for df in results:
-        if df is not None:
-            data_frames.append(df)
-        # When batch full, concatenate and clear
-        if i % batch_size == 0:
-            results.append(pd.concat(batch, ignore_index=True))
-            batch.clear()
+        #  results = [df for df in results if df is not None]
+        data_frames = []
+        batch=[]
+        for i, df in enumerate(results_iterator, start=1):
+            if df is not None:
+                batch.append(df)
+                # When batch full, concatenate and clear
+                if i % batch_size == 0:
+                    data_frames.append(pd.concat(batch, ignore_index=True))
+                    batch.clear()
 
         # concatenate any leftovers
         if batch:
-            results.append(pd.concat(batch, ignore_index=True))
+            data_frames.append(pd.concat(batch, ignore_index=True))
   
     return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
 
@@ -1150,11 +1151,10 @@ def process_combination(args):
     # df = load_data(folder_path, management)
     print("Processing case study ", management, " in ", case_study )
     print("Loading data in parallel...")
-    stand_simtype_count = None
-    df, stand_simtype_count = load_data_parallel(folder_path, management, sample, num_cores)
+    df = load_data_parallel(folder_path, management, sample, num_cores)
 
     print("Preprocessing main data...")
-    summaries = preprocess_data(df, management, stand_simtype_count)
+    summaries = preprocess_data(df, management)
 
     print("Loading stand data...")
     stand_data = pd.read_csv(stand_data_path)
