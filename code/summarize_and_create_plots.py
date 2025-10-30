@@ -70,7 +70,6 @@ def load_data(folder_path, management_scenario):
                 stand, simtype, planted_species, plantation = parse_filename(file, management_scenario)
                 # Read the CSV file
                 data = pd.read_csv(filename, sep=";", low_memory=False)
-                n_runs = data["Beschrieb/BaumNr"].max()
                 # Identify the row with '#Gruppierungsmerkmal' and set it as the new header
                 cut_point = data[data["#ID"] == "#Gruppierungsmerkmal"]
                 if not cut_point.empty:
@@ -78,7 +77,6 @@ def load_data(folder_path, management_scenario):
                     data = data[cut_point_index:]
                     data.columns = data.iloc[0]
                     data = data[1:]
-                    data["n_runs"] = n_runs
                     data["simtype"] = simtype
                     data["stand"] = stand
                     data["planted_species"] = planted_species
@@ -93,7 +91,7 @@ def load_data(folder_path, management_scenario):
                 print(f"Warning: Error reading file {file}: {e}")
     return df
 
-def load_data_parallel(folder_path, management_scenario, sample=False, num_cores=1):
+def load_data_parallel(folder_path, management_scenario, sample=False, num_cores=1, batch_size=500):
     """
     Efficiently reads and combines data from CSV files in parallel using multiprocessing.
 
@@ -122,17 +120,24 @@ def load_data_parallel(folder_path, management_scenario, sample=False, num_cores
     args = [(folder_path, f, management_scenario) for f in files]
 
     with Pool(num_cores) as pool:
-        results = pool.map(process_file, args)
+        results = pool.imap_unordered(process_file, args)
 
-    results = [res for res in results if res[0] is not None]
-    # Separate data and count occurrences
+    #  results = [df for df in results if df is not None]
     data_frames = []
-    pair_counts = defaultdict(int)
+    batch=[]
+    for df in results:
+        if df is not None:
+            data_frames.append(df)
+        # When batch full, concatenate and clear
+        if i % batch_size == 0:
+            results.append(pd.concat(batch, ignore_index=True))
+            batch.clear()
 
-    for df, stand, simtype in results:
-        data_frames.append(df)
-        pair_counts[(stand, simtype)] += 1
-    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame(), pair_counts
+        # concatenate any leftovers
+        if batch:
+            results.append(pd.concat(batch, ignore_index=True))
+  
+    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
 
 def process_file(file_path_and_name):
     """
@@ -158,24 +163,22 @@ def process_file(file_path_and_name):
         df = pd.read_csv(os.path.join(file_path, file_name), sep=";", low_memory=False)
         cut_point = df[df["#ID"] == "#Gruppierungsmerkmal"]
         if cut_point.empty:
-            return None, None, None
+            return None
         cut_idx = cut_point.index[0]
-        n_runs = int(pd.to_numeric(df[:cut_idx]["Beschrieb/BaumNr"], errors='coerce').fillna(0).max())
         df = df[cut_idx:]
         df.columns = df.iloc[0]
         df = df[1:]
-        df["n_runs"] = n_runs
         df["simtype"] = simtype
         df["stand"] = stand
         df["planted_species"] = planted_species 
         df["planting"] =  True if planted_species != "999" else False
         df["plantation"] =  plantation
-        return df, stand, simtype
+        return df
     except Exception as e:
         print(f"Error processing {file_name}: {e}")
-        return None, None, None
+        return None
 
-def preprocess_data(df, management_scenario, stand_simtype_count = None, time_cut = 2160):
+def preprocess_data(df, management_scenario):
     """
     Preprocesses the combined DataFrame by removing unnecessary columns,
     handling missing values, renaming columns with umlauts, and casting volume columns to float.
@@ -185,9 +188,6 @@ def preprocess_data(df, management_scenario, stand_simtype_count = None, time_cu
     Args:
         df (pandas.DataFrame): The DataFrame to preprocess.
         management_scenario (str): The management scenario, used to set weights.
-        stand_simtype_count(defaultdict): Defaultdictionary where keys are stand,simtype) pair and values their observed occurrences
-        time_cut: int, the maximum value for 'Gruppierungsmerkmal' to keep rows (i.e., the maximum year). 
-                Time cut value is exclusive, i.e., rows with 'Gruppierungsmerkmal' >= time_cut are dropped
 
     Returns:
         pandas.DataFrame: The preprocessed DataFrame.
@@ -222,15 +222,6 @@ def preprocess_data(df, management_scenario, stand_simtype_count = None, time_cu
         else:
             print(f"Warning: Column '{col}' not found, skipping float conversion.")
     
-    # if stand_simtype_count is not None:
-    #     # Create a column with the count for each (stand, simtype) pair
-    #     summaries['pair_count'] = summaries.apply(lambda row: stand_simtype_count[(row['stand'], row['simtype'])], axis=1)
-
-    #     # Divide all numeric columns (except for stand, simtype, pair_count) by the pair count 
-    #     summaries[cols_to_float] = summaries[cols_to_float].div(summaries['pair_count'], axis=0)
-
-    #     # Drop the helper column
-    #     summaries.drop(columns='pair_count', inplace=True)
 
     # rename the column of summaries "Gruppierungsmerkmal" as "year"
     summaries.rename(columns={"Gruppierungsmerkmal": "year"}, inplace=True)
@@ -276,8 +267,6 @@ def preprocess_data(df, management_scenario, stand_simtype_count = None, time_cu
     # drop the weight column
     summaries = summaries.drop(columns=["weight"])   
 
-    # dividing by the number of runs that have been aggregated when using the summaries of the CSV files created by SorSim
-    # summaries[cols_to_float] = summaries[cols_to_float].div(summaries["n_runs"], axis=0)  
 
     return summaries
 
@@ -301,14 +290,17 @@ def augment_with_stand_data(summaries, stand_data):
         if int(stand) not in stand_data["fsID"].values:
             print(f"Stand {stand} not found in stand data")
     #stand_to_else = stand_data[["fsID", "Above1000m", "n.patches", "area"]].copy()
-    stand_to_else = stand_data[["fsID", "area_ha"]].copy()
+    col_to_keep = ["fsID", "area_ha"]
+    if "Above1000m" in  stand_data.columns:
+        col_to_keep = col_to_keep + ["Above1000m"]
+    stand_to_else = stand_data[col_to_keep].copy()
     stand_to_else.index = stand_to_else["fsID"].astype(str)
     stand_to_else = stand_to_else.drop(columns=["fsID"])
     stand_to_else_dict = stand_to_else.to_dict()
 
     # Adding area and altitude to summaries
-    # summaries["Above1000m"] = summaries["stand"].astype(str).map(stand_to_else_dict["Above1000m"])
-    summaries["Above1000m"] = np.random.sample(summaries.shape[0])>0.5
+    if "Above1000m" in  stand_data.columns:
+        summaries["Above1000m"] = summaries["stand"].astype(str).map(stand_to_else_dict["Above1000m"])
     # computing the simulated area
     #summaries["sim_area (m2)"] = summaries["stand"].astype(str).map(stand_to_else_dict["n.patches"]) * 625
     # the simulated area is always 100 patches of 625m2 each
