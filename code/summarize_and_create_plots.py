@@ -314,9 +314,9 @@ def augment_with_stand_data(summaries, stand_data):
     # we have saved the simulated area in "sim_area (m2)" column
     # summaries["stand_productivity"] = summaries["Volumen OR [m3]"] / summaries["sim_area (m2)"]
     summaries["Volumen OR [m3]"] /= summaries["sim_area (m2)"] 
-    summaries["Volumen OR [m3]"] *= summaries["area"]
+    summaries["Volumen OR [m3]"] *= summaries["area"]*10000
     summaries["Volumen IR [m3]"] /= summaries["sim_area (m2)"] 
-    summaries["Volumen IR [m3]"] *= summaries["area"]
+    summaries["Volumen IR [m3]"] *= summaries["area"]*10000
 
     return summaries
 
