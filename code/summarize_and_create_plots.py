@@ -228,7 +228,8 @@ def preprocess_data(df, management_scenario):
     summaries.rename(columns={"Gruppierungsmerkmal": "year"}, inplace=True)
     # cast years as int
     summaries["year"] = summaries["year"].astype(int)
-
+    summaries = summaries[summaries["year"] >=2020 ]
+    
     # we know create a weighting columns to rescale the assortments based on the rules used in ForClim simulations
     if management_scenario == "BIO":
         # eight = 1.0 as there is no planting in BIO
@@ -267,7 +268,6 @@ def preprocess_data(df, management_scenario):
     summaries["Wert [CHF]"] = summaries["Wert [CHF]"] * summaries["weight"]
     # drop the weight column
     summaries = summaries.drop(columns=["weight"])   
-
 
     return summaries
 
