@@ -75,7 +75,6 @@ def process_files(files, input_folder_path, output_folder_path, case_study, mana
         # Step 1: Convert ForClim Output in Parallel
         with Pool(processes=num_cores) as pool:
             pool.starmap(convert_forclim, [(file, input_folder_path, output_folder_path, case_study, management_scenario, failed) for file in files])
-
         # Step 2: Run SorSim in Parallel
         with Pool(processes=num_cores) as pool:
             pool.starmap(run_sorsim, [(file, output_folder_path, case_study, management_scenario, failed, save_intermediate) for file in files])
