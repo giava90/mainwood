@@ -1223,6 +1223,7 @@ def process_combination(args):
     # plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries, save = True, show= False, fname ="8_5", normalize_by_area_and_year=True)
 
     print("All plots generated successfully.")
+    plt.close("all")
     print("Time taken:", dt.datetime.now() - start_time)
 
     # --- Splitting Data for Plotting ---
