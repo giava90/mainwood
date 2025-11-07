@@ -1195,30 +1195,37 @@ def process_combination(args):
     summaries.to_csv(f"../data/summaries_for_plots/{case_study}_{management}.csv")
     summaries = summaries[summaries["simtype"] == '1']
     # by diameter
-    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname='8_5_all_years')
     plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=False, fname='8_5_all_years')
-    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname='8_5_all_years')
     plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=False, fname='8_5_all_years')
+    if management == "WOOD" or management == "HYBRID":
+        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname='8_5_all_years')
+        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname='8_5_all_years')
     # 
     print("Plotting percentages of wood quality as stacked bars...")
-    plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5_all_years" )
+    if management == "WOOD" or management == "HYBRID":
+        plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5_all_years" )
     plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5_all_years", plantation_separate=False)
     print("Plotting total of wood quality as stacked bars...")
-    plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5_all_years", percent=False)
+    if management == "WOOD" or management == "HYBRID":
+        plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5_all_years", percent=False)
     plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5_all_years", percent=False, plantation_separate=False)
     # drop the rows that have "year", (i.e.,"Gruppierungsmerkmal")larger than time_cut
     time_cut = 2160
     summaries = summaries[summaries["year"]< time_cut]
-    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname='8_5')
+    if management == "WOOD" or management == "HYBRID":
+        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname='8_5')
     plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=False, fname='8_5')
-    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname='8_5')
+    if management == "WOOD" or management == "HYBRID":
+        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname='8_5')
     plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=False, fname='8_5')
-    plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5" )
+    if management == "WOOD" or management == "HYBRID":
+        plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5" )
     plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5", plantation_separate=False)
     print("Plotting total of wood quality as stacked bars...")
-    plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5", percent=False)
+    if management == "WOOD" or management == "HYBRID":
+        plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5", percent=False)
     plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5", percent=False, plantation_separate=False)
-    
+
     # plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries, save = True, show= False, fname ="8_5")
     # plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries, save = True, show= False, fname ="8_5", normalize_by_area_and_year=True)
 
