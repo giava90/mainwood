@@ -95,7 +95,9 @@ read_summary <- function(path, columns = NULL) {
 
   # CSV: the first column is an unnamed row number from pandas, drop it
   if (requireNamespace("readr", quietly = TRUE)) {
-    out <- readr::read_csv(path, show_col_types = FALSE)
+    # name_repair = "minimal" leaves the pandas index column unnamed instead of
+    # renaming it to `...1` and printing a "New names:" message at the reader
+    out <- readr::read_csv(path, show_col_types = FALSE, name_repair = "minimal")
     if (names(out)[1] %in% c("...1", "")) out <- out[, -1, drop = FALSE]
   } else {
     out <- utils::read.csv(path, check.names = FALSE)

@@ -24,6 +24,19 @@ numbers that are off by a constant factor. The tests target exactly those failur
 | `test_optimised_paths.py` | the vectorised replacements | A fast path that quietly disagrees with the per-row version it replaced |
 | `test_summary_io.py` | the Parquet/CSV deliverable and the converter | Handing collaborators a CSV that differs from the one their R pipeline expects |
 
+## The R side
+
+`code/read_summaries.R` is exercised by a separate R script that is **not** part of the
+pytest suite (it needs R, arrow and a real Parquet summary). It was run against a
+591 360-row summary and checks 26 behaviours, including that R's totals equal Python's to
+the last digit. Re-run it after changing the R helper:
+
+```bash
+"$LOCALAPPDATA/Programs/R/R-4.6.1/bin/x64/Rscript.exe" <the test script>
+```
+
+The environment it needs is documented in [10-environments.md](10-environments.md).
+
 ## What is deliberately not tested
 
 - **SorSim itself.** The jar is vendored, third-party and unchanged; testing it would need

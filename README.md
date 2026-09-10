@@ -29,6 +29,7 @@ figures/*.png
 | [docs/07-performance.md](docs/07-performance.md) | Where the time and the 20 GB actually go, with measured speed-ups |
 | [docs/08-refactoring.md](docs/08-refactoring.md) | What is worth restructuring, and what is not |
 | [docs/09-summary-format.md](docs/09-summary-format.md) | The summaries are Parquet; how to get CSV back, and how to read them from R |
+| [docs/10-environments.md](docs/10-environments.md) | The Python and R installs on this machine, and how the broken `base` env was fixed |
 
 ## Quick start
 

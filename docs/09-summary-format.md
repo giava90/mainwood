@@ -79,11 +79,16 @@ open_summary("data/summaries_for_plots/Surselva_WOOD.parquet") |>
 in. `list_summaries()` shows what is available; `summary_columns()` documents what each
 column means.
 
-**Caveat:** the R helper could not be executed here — the local R installation (the
-`rstudio` conda env) fails to start, and `arrow` is not installed on this machine. It was
-written and reviewed but not run. One defect was found and fixed by review
-(`col_select = all_of(NULL)` would have returned a zero-column table). Please run it once
-against a real file before sending it on. The Python side is fully tested.
+**Tested** against a real 591 360-row summary with R 4.6.1 and arrow 25.0.1 — 26 checks,
+all passing: path resolution, Parquet via arrow, the column subset, CSV and `.csv.gz`,
+the lazy `open_summary()` dplyr query, the nanoparquet fallback, and the helpers. The
+totals agree with Python to the last digit (`10047460.187642`, and `3068124.598854` for
+the RCP 8.5 group-by).
+
+Two defects were found and fixed on the way: `col_select = all_of(NULL)` returned a
+zero-column table for the ordinary no-columns call (found by review), and `readr` printed
+a `New names:` message on every CSV read (found by running it). See
+[10-environments.md](10-environments.md) for how R was installed.
 
 ### 3. Keep writing CSV from the pipeline
 
