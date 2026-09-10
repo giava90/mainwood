@@ -69,7 +69,7 @@ code/        the pipeline (stage 1, stage 2, plotting, SLURM wrappers)
 minimal/     the ForClim→SorSim converter and the vendored SorSim jar + Java sources
 data/        reference data (kept) and simulation data (regenerable — see the inventory)
 figures/     generated PNGs — git-ignored, reproducible via code/plot_only.py
-tests/       pytest suite, pure Python, ~5 s
+tests/       93 pytest tests, pure Python, ~5 s
 docs/        the documents listed above
 ```
 

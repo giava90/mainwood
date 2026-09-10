@@ -83,28 +83,39 @@ boolean one, and the two `.loc` selections are different sets. It works; it is n
 I left the arithmetic exactly as it is because changing it would change published numbers —
 the tests now make any future change verifiable.
 
-### 7. SorSim output encoding is decoded by luck
+### 7. SorSim writes replacement characters into its own output
 
-SorSim writes Windows-1252 (`Längenklasse`, `Stärkenklasse`). The code reads it without an
-`encoding=` argument and then renames the mojibake:
+*Corrected 2026-09-10 after checking the bytes — an earlier version of this file
+claimed the files were Windows-1252 and recommended `encoding="cp1252"`. They are not,
+and that change would have corrupted the data.*
 
-```python
-summaries.rename({"L�ngenklasse": "Laengenklasse", ...})
-```
+SorSim writes the file with the UTF-8 replacement character (`EF BF BD`) already baked
+in, so `Längenklasse` reaches disk as `L�ngenklasse`. Reading it back:
 
-This depends on the reader producing U+FFFD rather than raising `UnicodeDecodeError`, which
-is a function of the pandas version and the locale. A different Euler stack could break it.
-The robust fix is `pd.read_csv(..., encoding="cp1252")` plus proper names, but that changes
-the column names in every existing summary file, so it is a deliberate migration, not a
-drive-by edit.
+| read as | column name | species |
+|---|---|---|
+| default (what the code did) | `L�ngenklasse` | `F�hre` |
+| `utf-8` + `encoding_errors="replace"` | `L�ngenklasse` | `F�hre` |
+| `cp1252` | `Lï¿½ngenklasse` | `Fï¿½hre` |
 
-### 8. An unknown `Staerkenklasse` raises `KeyError` mid-job
+`preprocess_data` then maps `�` → `oe`, which is where `Foehre`, `Loerche` and
+`Ubrige Laubolz` come from — those spellings are not typos, they are the round trip.
 
-`add_sawmill_diameter_info` uses `dict[x]`, not `dict.get(x)` — the code comments even say
-so. SorSim writes `Restholz 1`, `Restholz 2`, … in the per-tree block and plain `Restholz`
-in the aggregated block, so a change in SorSim's aggregation would abort stage 2 hours in.
-Tested as current behaviour (`test_an_unknown_diameter_class_fails_loudly`) — failing loudly
-is defensible, but consider a clearer error message.
+The reader now passes `encoding="utf-8", encoding_errors="replace"` explicitly. That is
+what pandas was doing implicitly, so the values are unchanged, but it no longer depends
+on the pandas version choosing to replace rather than raise. The umlauts cannot be
+recovered — the information is gone before the file is written.
+
+### 8. An unknown `Staerkenklasse` is fatal (by design)
+
+`add_sawmill_diameter_info` used `dict[x]`, not `dict.get(x)`. SorSim writes `Restholz 1`,
+`Restholz 2`, … in the per-tree block and plain `Restholz` in the aggregated block, so a
+change in SorSim's aggregation would abort stage 2 hours in.
+
+Still deliberately fatal — silently bucketing an unknown class would corrupt the volumes —
+but the vectorisation (2026-09-10) now checks the distinct values up front and raises
+`KeyError: Unknown Staerkenklasse values: [...]` naming them, instead of failing on
+whichever row happened to hit it first.
 
 ### 9. Dead code in `map_species`
 

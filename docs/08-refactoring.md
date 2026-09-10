@@ -66,12 +66,13 @@ This is worth doing because you are about to add a region and a cohort, i.e. mor
 It is *not* worth doing as a general tidy-up — the value is that `summaries.py` becomes
 importable from a notebook, which is what `quick_check.ipynb` was reaching for.
 
-### 4. Take the performance changes in [07-performance.md](07-performance.md)
+### 4. ~~Take the performance changes~~ — done 2026-09-10
 
-Those are refactoring too, and they are the ones with a measured payoff: 16.7× on the
-read, 227× on the sawmill split, 26× on memory. Do these before any cosmetic restructuring
-— they change the shape of the problem (no more `sample_size`, no more 20 GB job), and
-that changes what the surrounding code needs to look like.
+Applied on branch `perf-optimisation`: 4.6× end to end, 8.4× on the read, 137× on the
+sawmill split, 3.2× on the frame, every output value unchanged. See
+[07-performance.md](07-performance.md). This was done first deliberately — it changes the
+shape of the problem (no more `sample_size`, no more 20 GB job), and that changes what the
+surrounding code needs to look like.
 
 ## Do not do these
 
@@ -88,6 +89,6 @@ that changes what the surrounding code needs to look like.
 
 1. Commit what is currently uncommitted (see [04-cleanup-proposal.md](04-cleanup-proposal.md) §D).
 2. Delete the dead plotting code — one commit, tests still green.
-3. Apply performance changes 1–4 from [07-performance.md](07-performance.md), one commit each, tests green after each.
+3. ~~Apply performance changes 1–4~~ — done, tests green.
 4. Extract `plots.py`, then `summaries.py`.
 5. Only then add the new region — on a codebase that runs in minutes and where a mistake fails a test instead of a job.

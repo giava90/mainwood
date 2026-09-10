@@ -1,7 +1,7 @@
 # Tests
 
 ```bash
-python -m pytest          # from the repository root, ~5 s, 84 tests
+python -m pytest          # from the repository root, ~5 s, 93 tests
 ```
 
 Pure Python — no Java, no SLURM, no data beyond what is in the repository. The suite runs
@@ -20,7 +20,8 @@ numbers that are off by a constant factor. The tests target exactly those failur
 | `test_output_input_converter.py` | `minimal/functions/tools.py` | Wrong cohort column, missing tree expansion, species dropped unnoticed |
 | `test_preprocess_weights.py` | `preprocess_data` planting weights | Every volume wrong by a constant factor |
 | `test_stand_and_quality.py` | area rescaling, diameter classes, quality split | A new region with a different `stand.details.csv` producing `NaN` volumes |
-| `test_summary_end_to_end.py` | the whole read chain on a real SorSim file | Header-block detection and the Windows-1252 umlauts |
+| `test_summary_end_to_end.py` | the whole read chain on a real SorSim file | Marker detection and the replacement-character round trip |
+| `test_optimised_paths.py` | the vectorised replacements | A fast path that quietly disagrees with the per-row version it replaced |
 
 ## What is deliberately not tested
 

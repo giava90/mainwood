@@ -1,3 +1,5 @@
+import io
+
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 import matplotlib as mpl
@@ -170,14 +172,26 @@ def load_data_parallel(folder_path, management_scenario, sample=False, num_cores
   
     return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
 
+#: SorSim writes a long per-tree block, then this marker, then the aggregated block.
+#: Only the aggregated block is used, and it is about 2.5% of the file.
+AGGREGATED_BLOCK_MARKER = b"\n#Gruppierungsmerkmal"
+
+
 def process_file(file_path_and_name):
     """
     Processes a single CSV file to extract and transform relevant data.
 
-    This function reads a CSV file, locates the row with the '#Gruppierungsmerkmal' marker
-    to reset the header, and appends additional metadata (stand and simtype) based on the
-    filename and management scenario. It returns the processed DataFrame or None if the
-    file is invalid or an error occurs.
+    The aggregated block is located with a raw byte scan and only that block is
+    handed to the CSV parser. Parsing the whole file and slicing afterwards --
+    which is what this did until 2026-09 -- cost about 17x more time and forced
+    every column to object dtype, because the per-tree block above the marker has
+    a different, wider layout.
+
+    The file is decoded as UTF-8 with replacement. SorSim has already written the
+    replacement characters into the file itself, so this reproduces the column
+    names and species spellings the rest of the pipeline expects (``F�hre``
+    -> ``Foehre`` in :func:`preprocess_data`). Decoding as cp1252 would corrupt
+    them further.
 
     Args:
         file_path_and_name (tuple): A tuple containing:
@@ -191,17 +205,20 @@ def process_file(file_path_and_name):
     file_path, file_name, management_scenario = file_path_and_name
     try:
         stand, simtype, planted_species, plantation, cohort = parse_filename(file_name, management_scenario)
-        df = pd.read_csv(os.path.join(file_path, file_name), sep=";", low_memory=False)
-        cut_point = df[df["#ID"] == "#Gruppierungsmerkmal"]
-        if cut_point.empty:
+        with open(os.path.join(file_path, file_name), "rb") as handle:
+            blob = handle.read()
+        position = blob.find(AGGREGATED_BLOCK_MARKER)
+        if position == -1:
             return None
-        cut_idx = cut_point.index[0]
-        df = df[cut_idx:]
-        df.columns = df.iloc[0]
-        df = df[1:]
+        df = pd.read_csv(
+            io.BytesIO(blob[position + 1:]),
+            sep=";",
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
         df["simtype"] = simtype
         df["stand"] = stand
-        df["planted_species"] = planted_species 
+        df["planted_species"] = planted_species
         df["planting"] =  True if planted_species != "999" else False
         df["plantation"] =  plantation
         df["cohort"] = cohort
@@ -209,6 +226,7 @@ def process_file(file_path_and_name):
     except Exception as e:
         print(f"Error processing {file_name}: {e}")
         return None
+
 
 def preprocess_data(df, management_scenario):
     """
@@ -243,8 +261,9 @@ def preprocess_data(df, management_scenario):
     summaries.rename({"L�ngenklasse": "Laengenklasse", 'St�rkenklasse': "Staerkenklasse"}, axis=1, inplace=True)
 
     # Rename rows in 'Baumart' with umlauts and specific replacements
-    summaries["Baumart"] = summaries["Baumart"].apply(lambda x: x.replace("�", "oe"))
-    summaries["Baumart"] = summaries["Baumart"].apply(lambda x: x.replace("oebriges", "Ubrige"))
+    summaries["Baumart"] = (summaries["Baumart"]
+                            .str.replace("�", "oe", regex=False)
+                            .str.replace("oebriges", "Ubrige", regex=False))
 
     # Cast volume and value columns to float
     cols_to_float = ["Volumen IR [m3]", "Volumen OR [m3]", "Wert [CHF]"]
@@ -304,6 +323,45 @@ def preprocess_data(df, management_scenario):
     summaries = summaries.drop(columns=["weight"])   
 
     return summaries
+
+#: Low-cardinality text columns worth storing as categories. ``diameter_class`` is
+#: deliberately absent: the plots group by it, and a categorical group key makes
+#: pandas emit the full product of categories instead of the observed rows.
+CATEGORICAL_COLUMNS = ("Baumart", "Laengenklasse", "Staerkenklasse", "stand",
+                       "simtype", "planted_species", "cohort")
+
+
+def compact_dtypes(summaries):
+    """Shrinks the summary frame by storing repeated text as categories.
+
+    The frame is one row per (year x species x length class x diameter class x
+    stand x planting variant), so a handful of short strings are repeated tens of
+    millions of times. Held as Python objects that was ~20 GB for a region the
+    size of Surselva, which is why the analysis job asks for 20 GB on one core.
+
+    Call this *after* the per-file frames have been concatenated and after
+    :func:`preprocess_data`: concatenating frames with different categories falls
+    back to object anyway, and ``preprocess_data`` groups by ``stand``/``simtype``,
+    which is slower on categoricals.
+
+    Args:
+        summaries (pandas.DataFrame): The preprocessed summaries.
+
+    Returns:
+        pandas.DataFrame: The same data with narrower dtypes.
+    """
+    if summaries.empty:
+        return summaries
+    before = summaries.memory_usage(deep=True).sum() / 1e6
+    for column in CATEGORICAL_COLUMNS:
+        if column in summaries.columns and summaries[column].dtype == object:
+            summaries[column] = summaries[column].astype("category")
+    if "year" in summaries.columns:
+        summaries["year"] = summaries["year"].astype("int16")
+    after = summaries.memory_usage(deep=True).sum() / 1e6
+    print(f"Frame compacted from {before:.0f} MB to {after:.0f} MB")
+    return summaries
+
 
 def augment_with_stand_data(summaries, stand_data):
     """
@@ -374,14 +432,22 @@ def add_sawmill_diameter_info(summaries):
     staerken2sawmills_use = {"1a": False, "1b": False, "2a": False, "2b": False, "3a": False, "3b": False,
                              "4": True, "5": True, "6": True, "7": True, "8": True,
                              "Restholz": False}
-    summaries["is_for_sawmills_diameter"] = summaries["Staerkenklasse"].apply(
-        lambda x: staerken2sawmills_use[x]) 
-    # We coudl use .get() in the above line to handle unknown Staerkenklasse values
     diameter_class_mapping = {"1a": "<20cm", "1b": "<20cm", "2a": "20-40cm", "2b": "20-40cm", "3a": "20-40cm", "3b": "20-40cm",
                              "4": ">40cm", "5": ">40cm", "6": ">40cm", "7": ">40cm", "8": ">40cm",
                              "Restholz": "<20cm"}
-    summaries["diameter_class"] = summaries["Staerkenklasse"].apply(lambda x: diameter_class_mapping[x])
+    # .map over the distinct values instead of .apply over every row. An unknown
+    # class still stops the run -- SorSim writes "Restholz 1", "Restholz 2", ...
+    # in the per-tree block and only plain "Restholz" in the aggregated one, so a
+    # value we have never seen means the file layout changed and the volumes
+    # would silently land in the wrong bucket.
+    klasse = summaries["Staerkenklasse"]
+    unknown = set(klasse.dropna().unique()) - set(staerken2sawmills_use)
+    if unknown:
+        raise KeyError(f"Unknown Staerkenklasse values: {sorted(unknown)}")
+    summaries["is_for_sawmills_diameter"] = klasse.map(staerken2sawmills_use).astype(bool)
+    summaries["diameter_class"] = klasse.map(diameter_class_mapping)
     return summaries
+
 
 def load_quality_data(file_path):
     """
@@ -453,7 +519,10 @@ def map_species_for_quality(df, species_quality_mapping):
         print("Warning: Input DataFrame is empty, no species mapping for quality performed.")
         return df
 
-    df["baumart_for_quality"] = df["Baumart"].apply(lambda x: species_quality_mapping.get(x, x)) # Default to original if not found
+    # map + fillna keeps the "default to the original name" behaviour without a
+    # Python call per row
+    mapped = df["Baumart"].map(species_quality_mapping)
+    df["baumart_for_quality"] = mapped.fillna(df["Baumart"])
     return df
 
 def calculate_biomass_for_sawmills(x, baumart2fraction, biomass_column="Volumen OR [m3]"):
@@ -497,6 +566,32 @@ def calculate_biomass_not_for_sawmills(x, baumart2fraction, biomass_column="Volu
     else:
         return x[biomass_column]
 
+def calculate_sawmill_split(summaries, baumart2fraction, biomass_column="Volumen OR [m3]"):
+    """Splits the volume into the share that can go to a sawmill and the rest.
+
+    Vectorised replacement for ``summaries.apply(calculate_biomass_for_sawmills,
+    axis=1)``, which built a Series per row and took minutes on a large region.
+    The result is identical: only rows in a sawmill diameter class contribute,
+    scaled by the species' A+B+C quality fraction, and a species missing from the
+    quality table contributes nothing.
+
+    Args:
+        summaries (pandas.DataFrame): Needs ``is_for_sawmills_diameter``,
+            ``baumart_for_quality`` and ``biomass_column``.
+        baumart2fraction (dict): Species -> fraction suitable for sawmills (0-1).
+        biomass_column (str): Column holding the volume to split.
+
+    Returns:
+        pandas.DataFrame: With the two ``_for_sawmills`` / ``_not_for_sawmills`` columns.
+    """
+    fraction = summaries["baumart_for_quality"].map(baumart2fraction).fillna(0.0).to_numpy(dtype=float)
+    volume = summaries[biomass_column].to_numpy(dtype=float)
+    for_sawmills = np.where(summaries["is_for_sawmills_diameter"].to_numpy(dtype=bool), volume * fraction, 0.0)
+    summaries[f"{biomass_column}_for_sawmills"] = for_sawmills
+    summaries[f"{biomass_column}_not_for_sawmills"] = volume - for_sawmills
+    return summaries
+
+
 def split_by_soft_hard(summaries, soft_species, hard_species):
     """
     Splits the summaries DataFrame into soft and hardwood categories.
@@ -513,12 +608,8 @@ def split_by_soft_hard(summaries, soft_species, hard_species):
         print("Warning: Input DataFrame is empty, cannot split by soft/hard wood.")
         return summaries
 
-    soft_hard_mapping = {v: "soft" for v in soft_species}
-    for v in hard_species:
-        soft_hard_mapping[v] = "hard"
-
-    summaries["is_soft"] = summaries["Baumart"].apply(lambda x: soft_hard_mapping.get(x) == "soft")
-    summaries["is_hard"] = summaries["Baumart"].apply(lambda x: soft_hard_mapping.get(x) == "hard")
+    summaries["is_soft"] = summaries["Baumart"].isin(soft_species)
+    summaries["is_hard"] = summaries["Baumart"].isin(hard_species)
     return summaries
 
 def rolling_stats(df, time_window=5): # Added default time_window
@@ -1200,6 +1291,9 @@ def process_combination(args):
     print("Preprocessing main data...")
     summaries = preprocess_data(df, management)
 
+    print("Compacting dtypes...")
+    summaries = compact_dtypes(summaries)
+
     print("Loading stand data...")
     stand_data = pd.read_csv(stand_data_path)
 
@@ -1224,13 +1318,7 @@ def process_combination(args):
     # --- Calculating Biomass for Sawmill Use ---
     print("Calculating biomass fractions for sawmill use...")
     if not summaries.empty and baumart2fraction:
-        summaries["Volumen OR [m3]_for_sawmills"] = summaries.apply(
-            lambda x: calculate_biomass_for_sawmills(x, baumart2fraction), axis=1
-        )
-        #summaries["Volumen OR [m3]_not_for_sawmills"] = summaries.apply(
-        #    lambda x: calculate_biomass_not_for_sawmills(x, baumart2fraction), axis=1
-        #)
-        summaries["Volumen OR [m3]_not_for_sawmills"] = summaries["Volumen OR [m3]"] - summaries["Volumen OR [m3]_for_sawmills"]
+        summaries = calculate_sawmill_split(summaries, baumart2fraction)
         # drop column baumart_for_quality
         summaries.drop(columns=["baumart_for_quality","is_for_sawmills_diameter"], inplace=True)
     else:

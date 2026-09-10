@@ -144,10 +144,14 @@ Writes:
 ../figures/*_8_5_alive_*.png    (alive)
 ```
 
-**Memory.** `run_analysis.sh` asks for 20 GB on 1 core. Surselva WOOD produced a 6.6 GB
-CSV, and the frame is held in memory in full before writing. For a large new region,
-start with `sample_size=100` to size the job, then scale `mem_per_cpu` from the observed
-row count. If it does not fit, run scenario by scenario rather than `ALL`.
+**Memory.** `run_analysis.sh` asks for 20 GB on 1 core. Since the 2026-09 optimisation
+that is generous: measured at 125 MB per 591 k summary rows, a Surselva-sized run
+(~40 M rows) needs roughly 8 GB. Keep the 20 GB for the first run of a new region, then
+scale it down from the reported frame size. If it still does not fit, run scenario by
+scenario rather than `ALL`. See [07-performance.md](07-performance.md).
+
+**Sampling.** `sample_size` was a workaround for the old read path. 2 GB of SorSim output
+now summarises in about 12 seconds, so prefer `False` (all files) over `100`.
 
 ## 4. Re-running SorSim without re-converting
 
