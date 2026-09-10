@@ -100,8 +100,9 @@ once instead of dying on the first row.
 - **`mem_per_cpu=20000` is far more than needed.** Extrapolating the measured 125 MB per
   591 k rows, a Surselva-sized run (~40 M rows) needs roughly 8 GB rather than 20 GB, and
   peak RSS is set by `preprocess_data`, before compaction.
-- **The remaining bottleneck is `to_csv`** — 4.68 s of 11.87 s, ~39%. It was untouched
-  because you want plain CSV. If that ever changes, this is where the next 40% is.
+- **`to_csv` was the remaining bottleneck** — 4.68 s of 11.87 s, ~39%. Writing Parquet
+  instead takes 0.51 s for the same table (7× faster, 5.4× smaller). That change landed
+  separately; see [09-summary-format.md](09-summary-format.md).
 
 ## Not done
 

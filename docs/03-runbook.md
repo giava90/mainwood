@@ -126,22 +126,29 @@ python summarize_and_create_plots.py <Region> BAU ../data 4 100          # dead,
 python summarize_and_create_plots.py <Region> BAU ../data 4 False alive  # alive, everything
 ```
 
-Arguments: `<case_study> <scenario> <folder_data> <n_cores> <sample_size> [cohort]`
+Arguments: `<case_study> <scenario> <folder_data> <n_cores> <sample_size> [cohort] [format]`
 
 - `folder_data` — root that holds `<region>/outputs/<scenario>/`; on Euler
   `/cluster/scratch/giacomov/mainwood/`
 - `sample_size` — `False` for all files, or an integer (random sample, seed 42)
 - `cohort` — `dead` (default) or `alive`
+- `format` — `parquet` (default), `csv` or `csv.gz`; see [09-summary-format.md](09-summary-format.md)
 
 Then submit with `./run_analysis.sh`.
 
 Writes:
 
 ```
-../data/summaries_for_plots/<Region>_<scenario>.csv          # dead — historical name
-../data/summaries_for_plots/<Region>_<scenario>_alive.csv    # alive
+../data/summaries_for_plots/<Region>_<scenario>.parquet          # dead — historical name
+../data/summaries_for_plots/<Region>_<scenario>_alive.parquet    # alive
 ../figures/*_8_5_*.png          (dead)
 ../figures/*_8_5_alive_*.png    (alive)
+```
+
+To hand these to someone whose pipeline reads CSV:
+
+```bash
+python summary_to_csv.py ../data/summaries_for_plots/ --gzip
 ```
 
 **Memory.** `run_analysis.sh` asks for 20 GB on 1 core. Since the 2026-09 optimisation
@@ -173,9 +180,9 @@ Figures are cheap; the summaries are not. To change a plot, do not re-run stage 
 python plot_only.py <Region> BAU ../data 1 False
 ```
 
-It reads `../data/summaries_for_plots/<Region>_<scenario>.csv` directly. Note it filters
-`simtype == 1` as an **integer** (correct when reading back from CSV), whereas stage 2
-filters the string `'1'` (correct in-memory). Both mean RCP 8.5.
+It reads `../data/summaries_for_plots/<Region>_<scenario>.{parquet,csv}` — whichever
+exists. Both it and stage 2 now select RCP 8.5 by comparing `simtype` as text, so the
+result no longer depends on which format the summary was stored in.
 
 ## 6. Tests
 

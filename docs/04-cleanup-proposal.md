@@ -134,6 +134,7 @@ Options, in the order I would consider them:
 3. Keep the archive on Euler scratch (note: **scratch is purged**, so this is not
    long-term storage) or on the group's project space.
 
-You asked to keep plain CSV, so no format change is proposed here — but for reference,
-these files compress roughly 10× with gzip and 15–20× as Parquet, both readable by
-`pd.read_csv`/`pd.read_parquet` with no other change.
+**Update (2026-09-10):** the pipeline now writes Parquet by default, which takes the
+folder from ~13 GB to ~2.4 GB, with a converter that reproduces the old CSVs
+byte-for-byte for collaborators. See [09-summary-format.md](09-summary-format.md). The
+existing CSVs have not been touched.

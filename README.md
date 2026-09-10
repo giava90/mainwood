@@ -28,6 +28,7 @@ figures/*.png
 | [docs/06-known-issues.md](docs/06-known-issues.md) | Bugs found and fixed, and the fragile spots left in place |
 | [docs/07-performance.md](docs/07-performance.md) | Where the time and the 20 GB actually go, with measured speed-ups |
 | [docs/08-refactoring.md](docs/08-refactoring.md) | What is worth restructuring, and what is not |
+| [docs/09-summary-format.md](docs/09-summary-format.md) | The summaries are Parquet; how to get CSV back, and how to read them from R |
 
 ## Quick start
 
@@ -42,8 +43,11 @@ python convert_data.py WOOD True 4 False Entlebuch
 # stage 1 — alive cohort (standing stock)
 python convert_data.py WOOD True 4 False Entlebuch alive
 
-# stage 2 — summaries + figures
+# stage 2 — summaries + figures (Parquet by default; add "csv" for CSV)
 python summarize_and_create_plots.py Entlebuch WOOD ../data 4 100
+
+# hand the summaries to a collaborator whose pipeline reads CSV
+python summary_to_csv.py ../data/summaries_for_plots/ --gzip
 ```
 
 Run tests from the repository root:
@@ -69,7 +73,7 @@ code/        the pipeline (stage 1, stage 2, plotting, SLURM wrappers)
 minimal/     the ForClim→SorSim converter and the vendored SorSim jar + Java sources
 data/        reference data (kept) and simulation data (regenerable — see the inventory)
 figures/     generated PNGs — git-ignored, reproducible via code/plot_only.py
-tests/       93 pytest tests, pure Python, ~5 s
+tests/       111 pytest tests, pure Python, ~8 s
 docs/        the documents listed above
 ```
 

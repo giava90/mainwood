@@ -12,6 +12,8 @@ import datetime as dt
 from multiprocessing import Pool
 from collections import defaultdict
 
+from summary_io import SUMMARY_FORMATS, write_summary
+
 import pdb
 
 
@@ -1259,11 +1261,14 @@ def process_combination(args):
     that older call sites keep working.
     """
     global case_study, management, cohort
+    summary_format = "parquet"
     if len(args) == 6:
         case_study, management, folder_path, start_time, sample, num_cores = args
         cohort = "dead"
-    else:
+    elif len(args) == 7:
         case_study, management, folder_path, start_time, sample, num_cores, cohort = args
+    else:
+        case_study, management, folder_path, start_time, sample, num_cores, cohort, summary_format = args
     # --- Configuration ---
     folder_path = f"{folder_path}/{case_study}/outputs/{management}/"
     stand_data_path = f"../data/{case_study}/stand.details.csv"
@@ -1327,9 +1332,11 @@ def process_combination(args):
     # dead-cohort summaries keep their historical name so earlier outputs stay
     # addressable; alive-cohort summaries get their own file next to them
     suffix = "" if cohort == "dead" else f"_{cohort}"
-    summary_path = f"../data/summaries_for_plots/{case_study}_{management}{suffix}.csv"
-    print("Writing summary table to", summary_path)
-    summaries.to_csv(summary_path)
+    written = write_summary(summaries,
+                            f"../data/summaries_for_plots/{case_study}_{management}{suffix}",
+                            fmt=summary_format)
+    print("Wrote summary table to", written,
+          f"({os.path.getsize(written)/1e6:,.0f} MB)")
     summaries = summaries[summaries["simtype"] == '1']
     # figures for the alive cohort are tagged so they do not overwrite the dead ones
     fig_tag = "8_5" if cohort == "dead" else f"8_5_{cohort}"
@@ -1382,8 +1389,10 @@ if __name__ == "__main__":
     num_cores = int(sys.argv[4])
     sample_size = sys.argv[5]
     cohort_input = sys.argv[6] if len(sys.argv) > 6 else "dead"
+    summary_format_input = sys.argv[7] if len(sys.argv) > 7 else "parquet"
     print("Processing data for management scenario ", management_input)
     print("Cohort ", cohort_input)
+    print("Summary format ", summary_format_input)
     print("Case study ", case_study_input)
     print("Number of cores to be used ", num_cores)
     print("The sample size is ", sample_size)
@@ -1396,6 +1405,8 @@ if __name__ == "__main__":
         raise ValueError(f"Invalid management scenario. Please provide a valid management scenario {valid_management_scenarios}.")
     if cohort_input not in ("dead", "alive"):
         raise ValueError("Invalid cohort. Please provide 'dead' or 'alive'.")
+    if summary_format_input not in SUMMARY_FORMATS:
+        raise ValueError(f"Invalid summary format. Please provide one of {list(SUMMARY_FORMATS)}.")
     if sample_size != 'False':
         try:
             sample_size = int(sample_size)
@@ -1407,7 +1418,8 @@ if __name__ == "__main__":
      # Select what to run
     case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study_input == "All" else [case_study_input]
     scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_input == "ALL" else [management_input]
-    combinations = [(cs, ms, folder_path, start_time, sample_size, num_cores, cohort_input) for cs in case_studies_to_run for ms in scenarios_to_run]
+    combinations = [(cs, ms, folder_path, start_time, sample_size, num_cores, cohort_input, summary_format_input)
+                    for cs in case_studies_to_run for ms in scenarios_to_run]
 
     for cb in combinations:
         results = process_combination(cb)

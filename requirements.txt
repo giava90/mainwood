@@ -12,6 +12,7 @@ numpy>=1.24
 matplotlib>=3.7
 seaborn>=0.12
 openpyxl>=3.1        # reading data/fraction_quality.xlsx
+pyarrow>=14.0        # Parquet summaries (code/summary_io.py, summary_to_csv.py)
 py4j>=0.10.9         # bridge to minimal/sorsim/SorSim4Python.jar
 
 # Tests only
