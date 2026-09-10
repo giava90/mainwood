@@ -1,10 +1,26 @@
+"""Re-run SorSim from tree lists that are already in ``intermediate/<scenario>/``.
+
+Same as :mod:`convert_data` but skips the ForClim conversion step -- use it when a
+run was interrupted after the tree lists were written (``save_intermediate=True``),
+or when SorSim itself failed and the conversion does not need repeating.
+
+Usage:
+    python convert_data_from_intermediate.py <scenario> <use_sample> <n_cores> <save_intermediate> <case_study>
+
+The cohort is taken from each tree list name, so no cohort argument is needed.
+"""
 import os
 import subprocess
 import zipfile
 import sys
 import datetime as dt
 from multiprocessing import Pool, Manager
-import re
+
+from naming import (
+    intermediate_filename,
+    parse_intermediate_filename,
+    sorsim_output_filename,
+)
 
 def get_files_in_folder(folder_path):
     """Returns a list of file names in the specified folder."""
@@ -24,32 +40,31 @@ def run_command(command):
         print("STDERR:", e.stderr)
         return False
 
-def convert_forclim(file, input_folder_path, output_folder_path, case_study, management_scenario, failed):
-    stand, simtype = parse_filename(file, case_study, management_scenario)
-    command = (f"python ../minimal/output_input_converter.py {input_folder_path} {file} "
-               f"{output_folder_path}/intermediate/{management_scenario}/ "
-               f"deadCohorts{stand}_{simtype}.csv True")
-    if not run_command(command):
-        failed.append(file)  # Store failed file
-
 def run_sorsim(file, output_folder_path, case_study, management_scenario, failed, save_intermediate=False):
-    """ Running the SorSim script.
-    Args:
+    """Runs SorSim on an intermediate tree list that already exists on disk.
 
+    The cohort is read back from the tree list name, so a folder holding both
+    ``deadCohorts*`` and ``aliveCohorts*`` files is processed correctly in one go.
     """
     if file in failed:
         return  # Skip failed files
-    stand, simtype = parse_filename(file, case_study, management_scenario)
+    parsed = parse_intermediate_filename(file)
+    if parsed is None:
+        print(f"Skipping {file}: not an intermediate SorSim tree list.")
+        return
+    cohort, stand, simtype = parsed
+    intermediate_path = (f"{output_folder_path}/intermediate/{management_scenario}/"
+                         f"{intermediate_filename(stand, simtype, cohort)}")
     command = (f"python ../minimal/run_sorsim.py ../minimal/sorsim/SorSim4Python.jar "
-               f"{output_folder_path}/intermediate/{management_scenario}/deadCohorts{stand}_{simtype}.csv "
-               f"{output_folder_path}/outputs/{management_scenario}/sorsim_output{stand}_{simtype}.csv 6 True")
+               f"{intermediate_path} "
+               f"{output_folder_path}/outputs/{management_scenario}/"
+               f"{sorsim_output_filename(stand, simtype, cohort)} 6 True")
     if not run_command(command):
         failed.append(file)  # Store failed file
     elif save_intermediate == "True":
-        compress_file(stand, simtype, management_scenario)
+        compress_file(stand, simtype, output_folder_path, management_scenario, cohort)
     else:
-        file_path = f"{output_folder_path}/intermediate/{management_scenario}/deadCohorts{stand}_{simtype}.csv"
-        os.remove(file_path)
+        os.remove(intermediate_path)
 
 def process_files(files, input_folder_path, output_folder_path, case_study, management_scenario, num_cores=4, sample=False, save_intermediate = False):
     """Converts ForClim output and runs SorSim for each file in parallel using multiprocessing.
@@ -80,27 +95,24 @@ def process_files(files, input_folder_path, output_folder_path, case_study, mana
 
 
 
-def parse_filename(filename, case_study, management_scenario):
-    """Extracts stand and simtype from the filename."""
-    if management_scenario == "BIO":
-        stand, simtype = filename.split("_")
-        stand = stand.replace("deadCohorts", "")  # Extract numeric stand ID
-        simtype = simtype.replace(".csv", "")   # Extract first letter of simtype
-        return stand, simtype
-    else:
-        parts = filename.split("_") 
-        stand = parts[0].replace("deadCohorts", "")
-        simtype = ""
-        for p in parts[1:]:
-            simtype += p+"_"
-        simtype = simtype.replace(".csv_", "")
-        return stand, simtype
-  
-def compress_file(stand, simtype, output_folder_path, management_scenario):
+def parse_filename(filename, case_study=None, management_scenario=None):
+    """Extracts ``(stand, simtype)`` from an intermediate tree list name.
+
+    Kept for backwards compatibility; :func:`naming.parse_intermediate_filename`
+    also returns the cohort and is what the pipeline uses.
+    """
+    parsed = parse_intermediate_filename(filename)
+    if parsed is None:
+        return None
+    _cohort, stand, simtype = parsed
+    return stand, simtype
+
+def compress_file(stand, simtype, output_folder_path, management_scenario, cohort="dead"):
     """Compresses and removes the intermediate CSV file."""
-    file_path = f"{output_folder_path}/intermediate/{management_scenario}/deadCohorts{stand}_{simtype}.csv"
+    file_path = (f"{output_folder_path}/intermediate/{management_scenario}/"
+                 f"{intermediate_filename(stand, simtype, cohort)}")
     zip_path = file_path + ".zip"
-    
+
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         zipf.write(file_path, os.path.basename(file_path))
     os.remove(file_path)
@@ -171,7 +183,7 @@ if __name__ == "__main__":
     print("Save intermediate files as zip ", save_intermediate)
     # check that the argument is valid
     valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL", "BIO"]
-    valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All"]
+    valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All", "Misox"]
     if case_study not in valid_case_studies:
         raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
     if management_scenario not in valid_management_scenarios:

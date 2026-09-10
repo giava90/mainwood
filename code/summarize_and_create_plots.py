@@ -17,34 +17,57 @@ from matplotlib.lines import Line2D
 
 def parse_filename(filename: str, scenario: str) -> tuple:
     """
-    Parse a filename to extract stand and simtype (and species if needed),
-    based on the management scenario.
+    Parse a SorSim output filename into the metadata carried by that file.
 
     Parameters:
     - filename: str, e.g. "sorsim_output240_7_planted_01.csv"
+                     or "sorsim_alive_output240_7_planted_01.csv"
     - scenario: str, one of "WOOD", "BAU", "HYBRID", "BIO"
 
     Returns:
-    - tuple: (stand, simtype, "") if scenario is BIO
-             (stand, simtype, planted_species) otherwise
+    - tuple: (stand, simtype, planted_species, plantation, cohort)
+             planted_species is "999" for BIO and for the no-planting variant;
+             plantation is True for the single-species plantation naming
+             (e.g. "sorsim_output59_PMen_1.csv");
+             cohort is "dead" or "alive".
     """
     parts = filename.replace(".csv", "").split("_")
+
+    # Alive-cohort files carry an "alive" flag right after the "sorsim" prefix.
+    # Strip it, and everything downstream sees the historical dead-cohort layout.
+    cohort = "dead"
+    if len(parts) > 1 and parts[1] == "alive":
+        cohort = "alive"
+        parts = [parts[0]] + parts[2:]
 
     # Expecting something like: ['sorsim', 'output240', '7', 'planted', '01']
     stand = parts[1].replace("output", "")
     simtype = parts[2]
 
     if scenario == "BIO":
-        return stand, simtype, "999", False
+        return stand, simtype, "999", False, cohort
     else:
         planted_species = parts[-1] if "planted" in parts else None # this case is panted
         if planted_species is None:
             # we are considering plantations with only one species for which the naming is different
             simtype = parts[-1]
             planted_species =  parts[2]
-            return stand, simtype, planted_species, True
+            return stand, simtype, planted_species, True, cohort
         else:
-            return stand, simtype, planted_species, False
+            return stand, simtype, planted_species, False, cohort
+
+def file_cohort(filename: str, scenario: str):
+    """Return the cohort a SorSim output belongs to, or None if the name is unreadable.
+
+    Used to filter a folder that holds both cohorts without letting one oddly
+    named leftover file abort the whole run.
+    """
+    try:
+        return parse_filename(filename, scenario)[4]
+    except (IndexError, ValueError):
+        print(f"Warning: cannot read cohort from {filename}, skipping.")
+        return None
+
 
 def load_data(folder_path, management_scenario):
     """
@@ -67,7 +90,7 @@ def load_data(folder_path, management_scenario):
         filename = os.path.join(folder_path, file)
         if os.path.isfile(filename):
             try:
-                stand, simtype, planted_species, plantation = parse_filename(file, management_scenario)
+                stand, simtype, planted_species, plantation, cohort = parse_filename(file, management_scenario)
                 # Read the CSV file
                 data = pd.read_csv(filename, sep=";", low_memory=False)
                 # Identify the row with '#Gruppierungsmerkmal' and set it as the new header
@@ -80,8 +103,9 @@ def load_data(folder_path, management_scenario):
                     data["simtype"] = simtype
                     data["stand"] = stand
                     data["planted_species"] = planted_species
-                    df["planting"] =  True if planted_species != "999" else False
-                    df["plantation"] =  plantation
+                    data["planting"] = True if planted_species != "999" else False
+                    data["plantation"] = plantation
+                    data["cohort"] = cohort
                     df = pd.concat([df, data], ignore_index=True)
                 else:
                     print(f"Warning: '#Gruppierungsmerkmal' row not found in {file}. Skipping.")
@@ -91,7 +115,7 @@ def load_data(folder_path, management_scenario):
                 print(f"Warning: Error reading file {file}: {e}")
     return df
 
-def load_data_parallel(folder_path, management_scenario, sample=False, num_cores=1, batch_size=500, chunk_size=None):
+def load_data_parallel(folder_path, management_scenario, sample=False, num_cores=1, batch_size=500, chunk_size=None, cohort="dead"):
     """
     Efficiently reads and combines data from CSV files in parallel using multiprocessing.
 
@@ -105,6 +129,8 @@ def load_data_parallel(folder_path, management_scenario, sample=False, num_cores
         management_scenario (str): A string used to extract metadata from filenames.
         sample (int): The number of files to sample at random to test. Default is False, meaning that all files are parsed
         num_cores (int): The number of cores used for the multiprocessing. Default is 1.
+        cohort (str): "dead" or "alive". Only the SorSim outputs of that cohort are read,
+            so a folder holding both cohorts yields one summary per cohort.
 
     Returns:
         pandas.DataFrame: A combined DataFrame containing processed data from all valid CSV files,
@@ -112,6 +138,10 @@ def load_data_parallel(folder_path, management_scenario, sample=False, num_cores
     """
     files = [f for f in os.listdir(folder_path)
              if os.path.isfile(os.path.join(folder_path, f)) and f != "assortments_summaries.csv"]
+    # keep only the requested cohort: dead-cohort names have no flag, alive ones
+    # carry "alive" right after the "sorsim" prefix
+    files = [f for f in files if file_cohort(f, management_scenario) == cohort]
+    print(f"Found {len(files)} files for the {cohort} cohort")
     if sample:
         np.random.seed(42)
         sample_size = min(sample, len(files))
@@ -160,7 +190,7 @@ def process_file(file_path_and_name):
     """
     file_path, file_name, management_scenario = file_path_and_name
     try:
-        stand, simtype, planted_species, plantation  = parse_filename(file_name, management_scenario)
+        stand, simtype, planted_species, plantation, cohort = parse_filename(file_name, management_scenario)
         df = pd.read_csv(os.path.join(file_path, file_name), sep=";", low_memory=False)
         cut_point = df[df["#ID"] == "#Gruppierungsmerkmal"]
         if cut_point.empty:
@@ -174,6 +204,7 @@ def process_file(file_path_and_name):
         df["planted_species"] = planted_species 
         df["planting"] =  True if planted_species != "999" else False
         df["plantation"] =  plantation
+        df["cohort"] = cohort
         return df
     except Exception as e:
         print(f"Error processing {file_name}: {e}")
@@ -219,7 +250,10 @@ def preprocess_data(df, management_scenario):
     cols_to_float = ["Volumen IR [m3]", "Volumen OR [m3]", "Wert [CHF]"]
     for col in cols_to_float:
         if col in summaries.columns:
-            summaries.loc[:, col] = pd.to_numeric(summaries[col], errors='coerce') # Handle potential conversion errors
+            # assign the whole column, not .loc[:, col]: the latter writes the
+            # numbers back into the existing object-dtype column, so every later
+            # multiplication and groupby runs element-by-element in Python
+            summaries[col] = pd.to_numeric(summaries[col], errors='coerce') # Handle potential conversion errors
         else:
             print(f"Warning: Column '{col}' not found, skipping float conversion.")
     
@@ -1127,8 +1161,18 @@ def plot_biomass_by_diameter_class(s, show=False, save=True, fname = "all", perc
         plt.show()  
 
 def process_combination(args):
-    global case_study, management
-    case_study, management, folder_path, start_time, sample, num_cores = args
+    """Builds the summary table and the figures for one (case study, scenario, cohort).
+
+    ``args`` is ``(case_study, management, folder_path, start_time, sample,
+    num_cores, cohort)``; ``cohort`` may be omitted and defaults to "dead" so
+    that older call sites keep working.
+    """
+    global case_study, management, cohort
+    if len(args) == 6:
+        case_study, management, folder_path, start_time, sample, num_cores = args
+        cohort = "dead"
+    else:
+        case_study, management, folder_path, start_time, sample, num_cores, cohort = args
     # --- Configuration ---
     folder_path = f"{folder_path}/{case_study}/outputs/{management}/"
     stand_data_path = f"../data/{case_study}/stand.details.csv"
@@ -1149,9 +1193,9 @@ def process_combination(args):
     # --- Data Loading and Preprocessing ---
     # print("Loading data...")
     # df = load_data(folder_path, management)
-    print("Processing case study ", management, " in ", case_study )
+    print("Processing case study ", management, " in ", case_study, "-", cohort, "cohort")
     print("Loading data in parallel...")
-    df = load_data_parallel(folder_path, management, sample, num_cores)
+    df = load_data_parallel(folder_path, management, sample, num_cores, cohort=cohort)
 
     print("Preprocessing main data...")
     summaries = preprocess_data(df, management)
@@ -1192,89 +1236,53 @@ def process_combination(args):
     else:
         print("Warning: Summaries DataFrame is empty or quality mapping is not available. Skipping sawmill biomass calculation.")
 
-    summaries.to_csv(f"../data/summaries_for_plots/{case_study}_{management}.csv")
+    # dead-cohort summaries keep their historical name so earlier outputs stay
+    # addressable; alive-cohort summaries get their own file next to them
+    suffix = "" if cohort == "dead" else f"_{cohort}"
+    summary_path = f"../data/summaries_for_plots/{case_study}_{management}{suffix}.csv"
+    print("Writing summary table to", summary_path)
+    summaries.to_csv(summary_path)
     summaries = summaries[summaries["simtype"] == '1']
+    # figures for the alive cohort are tagged so they do not overwrite the dead ones
+    fig_tag = "8_5" if cohort == "dead" else f"8_5_{cohort}"
     # by diameter
-    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=False, fname='8_5_all_years')
-    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=False, fname='8_5_all_years')
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=False, fname=fig_tag + '_all_years')
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=False, fname=fig_tag + '_all_years')
     if management == "WOOD" or management == "HYBRID":
-        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname='8_5_all_years')
-        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname='8_5_all_years')
+        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname=fig_tag + '_all_years')
+        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname=fig_tag + '_all_years')
     # 
     print("Plotting percentages of wood quality as stacked bars...")
     if management == "WOOD" or management == "HYBRID":
-        plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5_all_years" )
-    plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5_all_years", plantation_separate=False)
+        plot_percentages_of_wood(summaries, save = True, show= False,fname=fig_tag + "_all_years" )
+    plot_percentages_of_wood(summaries, save = True, show= False,fname=fig_tag + "_all_years", plantation_separate=False)
     print("Plotting total of wood quality as stacked bars...")
     if management == "WOOD" or management == "HYBRID":
-        plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5_all_years", percent=False)
-    plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5_all_years", percent=False, plantation_separate=False)
+        plot_percentages_of_wood(summaries, save = True, show= False, fname=fig_tag + "_all_years", percent=False)
+    plot_percentages_of_wood(summaries, save = True, show= False, fname=fig_tag + "_all_years", percent=False, plantation_separate=False)
     # drop the rows that have "year", (i.e.,"Gruppierungsmerkmal")larger than time_cut
     time_cut = 2160
     summaries = summaries[summaries["year"]< time_cut]
     if management == "WOOD" or management == "HYBRID":
-        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname='8_5')
-    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=False, fname='8_5')
+        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=True, fname=fig_tag)
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=True, plantation_separate=False, fname=fig_tag)
     if management == "WOOD" or management == "HYBRID":
-        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname='8_5')
-    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=False, fname='8_5')
+        plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=True, fname=fig_tag)
+    plot_biomass_by_diameter_class(summaries, show=show, save=save, percent=False, plantation_separate=False, fname=fig_tag)
     if management == "WOOD" or management == "HYBRID":
-        plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5" )
-    plot_percentages_of_wood(summaries, save = True, show= False,fname ="8_5", plantation_separate=False)
+        plot_percentages_of_wood(summaries, save = True, show= False,fname=fig_tag )
+    plot_percentages_of_wood(summaries, save = True, show= False,fname=fig_tag, plantation_separate=False)
     print("Plotting total of wood quality as stacked bars...")
     if management == "WOOD" or management == "HYBRID":
-        plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5", percent=False)
-    plot_percentages_of_wood(summaries, save = True, show= False, fname ="8_5", percent=False, plantation_separate=False)
+        plot_percentages_of_wood(summaries, save = True, show= False, fname=fig_tag, percent=False)
+    plot_percentages_of_wood(summaries, save = True, show= False, fname=fig_tag, percent=False, plantation_separate=False)
 
-    # plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries, save = True, show= False, fname ="8_5")
-    # plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries, save = True, show= False, fname ="8_5", normalize_by_area_and_year=True)
+    # plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries, save = True, show= False, fname=fig_tag)
+    # plot_normalized_biomass_for_sawmill_categories_and_altitues(summaries, save = True, show= False, fname=fig_tag, normalize_by_area_and_year=True)
 
     print("All plots generated successfully.")
     plt.close("all")
     print("Time taken:", dt.datetime.now() - start_time)
-
-    # --- Splitting Data for Plotting ---
-    # df_soft_1 = summaries[(summaries["simtype"] == "1") & (summaries["is_soft"] == True)].copy()
-    # df_hard_1 = summaries[(summaries["simtype"] == "1") & (summaries["is_hard"] == True)].copy()
-    # df_soft_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_soft"] == True)].copy()
-    # df_hard_7 = summaries[(summaries["simtype"] == "7") & (summaries["is_hard"] == True)].copy()
-    # # --- Plotting ---
-    # print("Plotting total biomass...")
-    # plot_biomass(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), show=show, save=save)
-
-    # # Calculate total area for normalization in the next plot
-    # if not summaries.empty:
-    #     areas = summaries.groupby(["stand", "Above1000m"])["area"].mean().groupby("Above1000m").sum().to_dict()
-    #     total_area = sum(areas.values())
-    #     df_biomass_soft_1_grouped = df_soft_1.groupby(['year'])[[
-    #         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    #     df_biomass_hard_1_grouped = df_hard_1.groupby(['year'])[[
-    #         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    #     df_biomass_soft_7_grouped = df_soft_7.groupby(['year'])[[
-    #         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-    #     df_biomass_hard_7_grouped = df_hard_7.groupby(['year'])[[
-    #         'Volumen OR [m3]_for_sawmills', 'Volumen OR [m3]_not_for_sawmills']].sum().fillna(0)
-
-    #     print("Plotting normalized biomass for sawmill categories with rolling stats...")
-    #     plot_normalized_biomass_for_sawmill_categories(
-    #         df_biomass_soft_1_grouped.copy(),
-    #         df_biomass_hard_1_grouped.copy(),
-    #         df_biomass_soft_7_grouped.copy(),
-    #         df_biomass_hard_7_grouped.copy(),
-    #         total_area,
-    #         show=show, 
-    #         save=save
-    #     )
-
-    # # normalized 
-    # print("Plotting percentages of wood quality as stacked bars...")
-    # plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5" )
-    # # plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5")
-    # print("Plotting total of wood quality as stacked bars...")
-    # plot_percentages_of_wood_quality(df_soft_1.copy(), df_hard_1.copy(), save = True, show= False,fname ="8_5", percent=False)
-    # # plot_percentages_of_wood_quality(df_soft_7.copy(), df_hard_7.copy(), save = True, show= False, fname="4_5", percent=False)
-    # #print("Plotting normalized biomass for sawmill categories and altitudes...")
-    # #plot_normalized_biomass_for_sawmill_categories_and_altitues_old(df_soft_1.copy(), df_hard_1.copy(), df_soft_7.copy(), df_hard_7.copy(), areas, show=show, save=save)
 
 
 if __name__ == "__main__":
@@ -1285,17 +1293,21 @@ if __name__ == "__main__":
     folder_path = sys.argv[3] 
     num_cores = int(sys.argv[4])
     sample_size = sys.argv[5]
+    cohort_input = sys.argv[6] if len(sys.argv) > 6 else "dead"
     print("Processing data for management scenario ", management_input)
+    print("Cohort ", cohort_input)
     print("Case study ", case_study_input)
     print("Number of cores to be used ", num_cores)
     print("The sample size is ", sample_size)
     # check that the argument is valid
-    valid_management_scenarios = ["BAU", "WOOD", "BIO", "ALL"] #, "HYBRID"]
+    valid_management_scenarios = ["BAU", "WOOD", "BIO", "ALL", "HYBRID"]
     valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "Misox", "All"]
     if case_study_input not in valid_case_studies:
         raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
     if management_input not in valid_management_scenarios:
         raise ValueError(f"Invalid management scenario. Please provide a valid management scenario {valid_management_scenarios}.")
+    if cohort_input not in ("dead", "alive"):
+        raise ValueError("Invalid cohort. Please provide 'dead' or 'alive'.")
     if sample_size != 'False':
         try:
             sample_size = int(sample_size)
@@ -1307,7 +1319,7 @@ if __name__ == "__main__":
      # Select what to run
     case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study_input == "All" else [case_study_input]
     scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_input == "ALL" else [management_input]
-    combinations = [(cs, ms, folder_path, start_time, sample_size, num_cores) for cs in case_studies_to_run for ms in scenarios_to_run]
+    combinations = [(cs, ms, folder_path, start_time, sample_size, num_cores, cohort_input) for cs in case_studies_to_run for ms in scenarios_to_run]
 
     for cb in combinations:
         results = process_combination(cb)

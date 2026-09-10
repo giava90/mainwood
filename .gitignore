@@ -1,2 +1,6 @@
 figures/
 data/
+__pycache__/
+*.pyc
+.pytest_cache/
+output.png
