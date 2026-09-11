@@ -103,10 +103,31 @@ matches against this string.
 
 ### 1.2 Folder skeleton
 
-Nothing to do: stage 1 creates `intermediate/<scenario>/` and `outputs/<scenario>/` under
-`MAINWOOD_OUTPUT_TEMPLATE` itself, and `preflight.py` creates them early so you can see
-where the run will write before submitting. (`bash_code_to_create_folder_structure_for_data.sh`
-is kept only for the `inputs/` side of a laptop copy.)
+A fresh (or freshly purged) `/cluster/scratch/<user>/mainwood/` is built from the same
+templates the pipeline reads, so it matches whatever `code/local.env` says:
+
+```bash
+cd code
+python setup_data_tree.py --dry-run     # show, create nothing
+python setup_data_tree.py               # every region, every scenario
+python setup_data_tree.py Jurapark      # just one region
+python setup_data_tree.py --inputs      # also make inputs/, if you copy files onto scratch
+```
+
+It is idempotent — re-run it after a scratch purge and it rebuilds only what is gone.
+
+Strictly speaking nothing here is required: stage 1 creates `intermediate/` and
+`outputs/` on demand and stage 2 creates the summary folder. The reason to run it is to
+see the layout, and to catch the configuration error it warns about:
+
+```
+WARNING: assortments are on scratch but the summaries are not
+```
+
+That combination used to be the default. Stage 2 took its input root as an argument but
+hardcoded `../data/summaries_for_plots/` for the output, so on Euler it read the
+assortments from scratch and wrote 12 GB of Surselva summaries back onto the home quota.
+`MAINWOOD_SUMMARY_DIR` fixes it; `setup_data_tree.py` tells you if you forgot.
 
 ### 1.3 Provide `stand.details.csv`
 

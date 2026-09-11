@@ -167,3 +167,28 @@ def test_stage_two_and_preflight_resolve_the_same_file(no_env, monkeypatch):
     assert preflight.paths.stand_details_path("Vaud") == expected
     assert summarize_and_create_plots.paths.stand_details_path("Vaud") == expected
     assert "/cluster/scratch/" not in expected
+
+
+def test_summary_dir_defaults_to_the_repository_folder(no_env):
+    assert paths.summary_dir() == "../data/summaries_for_plots"
+
+
+def test_summary_dir_has_no_trailing_separator(no_env, monkeypatch):
+    """Callers build '<dir>/<region>_<scenario>', so a trailing slash doubles it."""
+    monkeypatch.setenv("MAINWOOD_SUMMARY_DIR", "/cluster/scratch/giacomov/mainwood/summaries_for_plots/")
+    assert paths.summary_dir() == "/cluster/scratch/giacomov/mainwood/summaries_for_plots"
+
+
+def test_summaries_can_follow_the_assortments_onto_scratch(no_env, monkeypatch):
+    """The regression: stage 2 read from scratch but wrote the deliverable back
+    into the repository, i.e. onto the much smaller home quota."""
+    monkeypatch.setenv("MAINWOOD_SUMMARY_DIR", "/cluster/scratch/giacomov/mainwood/summaries_for_plots")
+    monkeypatch.setenv("MAINWOOD_OUTPUT_TEMPLATE", "/cluster/scratch/giacomov/mainwood/{case_study}/")
+
+    import plot_only
+    import summarize_and_create_plots
+
+    expected = "/cluster/scratch/giacomov/mainwood/summaries_for_plots"
+    assert summarize_and_create_plots.paths.summary_dir() == expected
+    assert plot_only.paths.summary_dir() == expected
+    assert "/scratch/" in paths.output_folder("Jurapark", "WOOD")

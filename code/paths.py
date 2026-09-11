@@ -38,6 +38,7 @@ DEFAULTS = {
     "MAINWOOD_OUTPUT_TEMPLATE": "../data/{case_study}/",
     "MAINWOOD_DATA_ROOT": "../data",
     "MAINWOOD_STAND_DETAILS": "../data/{case_study}/stand.details.csv",
+    "MAINWOOD_SUMMARY_DIR": "../data/summaries_for_plots",
     "MAINWOOD_SAMPLE_SIZE": "50",
 }
 
@@ -184,6 +185,22 @@ def stand_details_path(case_study, local_env=None):
     """
     template = setting("MAINWOOD_STAND_DETAILS", local_env)
     return expand(template, case_study, scenario="", cohort="", trailing_slash=False)
+
+
+def summary_dir(local_env=None):
+    """Folder holding the ``<region>_<scenario>.parquet`` deliverable.
+
+    Stage 2 hardcoded ``../data/summaries_for_plots/`` while taking its *input*
+    root as an argument, so on Euler it read the assortments from
+    ``/cluster/scratch/...`` and then wrote the summaries back inside the
+    repository -- onto the home quota, which is far smaller than scratch, for a
+    file that reaches 12 GB for Surselva.
+
+    Returns:
+        str: Folder path, without a trailing separator.
+    """
+    value = setting("MAINWOOD_SUMMARY_DIR", local_env)
+    return value.rstrip("/").rstrip(os.sep)
 
 
 def sample_size(local_env=None):

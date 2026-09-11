@@ -1336,7 +1336,7 @@ def process_combination(args):
     # addressable; alive-cohort summaries get their own file next to them
     suffix = "" if cohort == "dead" else f"_{cohort}"
     written = write_summary(summaries,
-                            f"../data/summaries_for_plots/{case_study}_{management}{suffix}",
+                            f"{paths.summary_dir()}/{case_study}_{management}{suffix}",
                             fmt=summary_format)
     print("Wrote summary table to", written,
           f"({os.path.getsize(written)/1e6:,.0f} MB)")

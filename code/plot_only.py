@@ -3,6 +3,7 @@ import pandas as pd
 import sys
 
 from summary_io import read_summary
+import paths
 import regions
 import datetime as dt
 
@@ -230,7 +231,7 @@ def process_combination(args):
     # --- Data Loading  ---
     print("Loading summaries...")
     # reads .parquet or .csv, whichever this region was written in
-    summaries = read_summary(f"../data/summaries_for_plots/{case_study}_{management}")
+    summaries = read_summary(f"{paths.summary_dir()}/{case_study}_{management}")
     print("Keeping only simtype ==1 that means RCP8.5")
     # compare as text: simtype is a string in memory and in Parquet, but a CSV
     # round trip turns it into an integer. Comparing against the bare 1 matched
