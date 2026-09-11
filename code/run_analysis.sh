@@ -14,12 +14,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-if [ -f local.env ]; then
-    set -a
-    # shellcheck disable=SC1091
-    . ./local.env
-    set +a
-fi
+# Per-machine settings. Environment wins over local.env, matching code/paths.py,
+# so a one-off override on the command line is honoured.
+# shellcheck disable=SC1091
+. ./load_env.sh
+load_local_env
 
 # Arguments first, so a typo fails here rather than after the modules load.
 case_study="${1:?case study required: Entlebuch | Vaud | Surselva | Misox | All}"

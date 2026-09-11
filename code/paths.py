@@ -23,6 +23,7 @@ configuration. See docs/03-runbook.md section 0.
 """
 
 import os
+import re
 
 #: Absolute path to ``code/``, so the dotenv lookup does not depend on the cwd.
 CODE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -40,6 +41,9 @@ DEFAULTS = {
 
 #: Placeholders a template may contain.
 PLACEHOLDERS = ("case_study", "scenario", "cohort")
+
+#: A settings key the shell can also assign. Kept in step with code/load_env.sh.
+SETTING_NAME = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def load_local_env(path=None):
@@ -68,10 +72,16 @@ def load_local_env(path=None):
             if line.startswith("export "):
                 line = line[len("export "):].lstrip()
             key, _, value = line.partition("=")
+            key = key.strip()
+            # local.env is also sourced by code/load_env.sh, which skips anything
+            # that is not a shell-assignable name. Skip the same lines here, or the
+            # two readers disagree about the same file.
+            if not SETTING_NAME.match(key):
+                continue
             value = value.split(" #", 1)[0].strip()
             if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
                 value = value[1:-1]
-            settings[key.strip()] = value
+            settings[key] = value
     return settings
 
 

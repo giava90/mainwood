@@ -15,12 +15,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # Per-machine settings. Exported so the Python entry point sees the same paths.
-if [ -f local.env ]; then
-    set -a
-    # shellcheck disable=SC1091
-    . ./local.env
-    set +a
-fi
+# Per-machine settings. Environment wins over local.env, matching code/paths.py,
+# so a one-off override on the command line is honoured.
+# shellcheck disable=SC1091
+. ./load_env.sh
+load_local_env
 
 # Arguments first, so a typo fails here rather than after the modules load.
 management_scenario="${1:?scenario required: BAU | WOOD | HYBRID | BIO | ALL}"
