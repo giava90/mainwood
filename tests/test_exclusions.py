@@ -144,3 +144,36 @@ def test_summary_names_the_stands_and_the_counts():
 
 def test_summary_is_empty_when_nothing_was_excluded():
     assert exclusions.summarise([], kept=6, total=6) == ""
+
+
+def test_a_float_fsid_column_still_joins(tmp_path):
+    """The September 2026 Jurapark delivery arrived with fsID as float64. Keying
+    on str(fsID) made every key "1432.0", so every stand parsed from a file name
+    was "not in stand.details.csv" -- stage 1 would have excluded the whole region
+    and produced an empty run that looked successful."""
+    import pandas as pd
+
+    path = tmp_path / "stand.details.csv"
+    pd.DataFrame({"fsID": [1432.0, 7934.0, 720900.0],
+                  "area_ha": [1.5, 2.0, 3.0]}).to_csv(path, index=False)
+
+    areas = exclusions.load_stand_areas(str(path))
+    assert set(areas) == {"1432", "7934", "720900"}
+    for stand in ("1432", "7934", "720900"):
+        assert exclusions.classify(stand, areas) is None
+
+
+def test_a_float_fsid_delivery_excludes_nothing_it_should_not(tmp_path):
+    """End to end through partition, which is what stage 1 calls."""
+    import pandas as pd
+
+    path = tmp_path / "stand.details.csv"
+    pd.DataFrame({"fsID": [100.0, 2501.0], "area_ha": [1.5, 0.0]}).to_csv(path, index=False)
+    areas = exclusions.load_stand_areas(str(path))
+
+    files = ["dataSim.dead100_1_planted_00.csv", "dataSim.dead2501_1_planted_00.csv"]
+    keep, rows = exclusions.partition(files, parse(), areas, "Jurapark", "BAU", "dead")
+
+    assert keep == ["dataSim.dead100_1_planted_00.csv"]
+    assert [r["stand"] for r in rows] == ["2501"]
+    assert rows[0]["reason"] == exclusions.NON_POSITIVE_AREA

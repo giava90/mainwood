@@ -50,6 +50,18 @@ def normalise(frame):
         tuple[pandas.DataFrame, list[str]]: The frame and a list of notes.
     """
     notes = []
+    # Write fsID as a plain integer when it is whole. The September 2026 Jurapark
+    # delivery arrived as float64, which turns every key into "1432.0" and breaks
+    # the join against the file names.
+    if "fsID" in frame.columns and frame["fsID"].notna().all():
+        try:
+            was = str(frame["fsID"].dtype)
+            if (frame["fsID"] % 1 == 0).all() and was != "int64":
+                frame = frame.copy()
+                frame["fsID"] = frame["fsID"].astype("int64")
+                notes.append(f"fsID coerced from {was} to integer")
+        except TypeError:
+            pass                      # non-numeric ids, left as delivered
     if "area_ha" not in frame.columns:
         candidates = [c for c in frame.columns if c.lower() == "area_ha"]
         if candidates:

@@ -124,3 +124,37 @@ def parse_intermediate_filename(filename):
     if match is None:
         return None
     return match.group(1), match.group(2), match.group(3)
+
+
+def stand_key(value):
+    """Canonical string form of a stand id, whichever side it came from.
+
+    The stand parsed out of a ForClim file name is a string of digits (``"1432"``).
+    The ``fsID`` column of ``stand.details.csv`` is whatever pandas inferred, and
+    that is not stable across deliveries: the September 2026 Jurapark file reads
+    as ``float64``, so ``str(fsID)`` gives ``"1432.0"`` and every join against the
+    file names fails. Silently -- the stands are all "missing", so stage 1 would
+    have excluded every one of them and produced an empty run.
+
+    Both sides go through here instead.
+
+    Args:
+        value: A stand id as ``int``, ``float``, ``str`` or numpy scalar.
+
+    Returns:
+        str: ``"1432"`` for ``1432``, ``1432.0``, ``"1432"`` and ``"1432.0"``.
+        Non-numeric ids are returned stripped but otherwise untouched, so a
+        region that uses letters in its ids still works.
+    """
+    text = str(value).strip()
+    if not text:
+        return text
+    try:
+        number = float(text)
+    except ValueError:
+        return text
+    if number != number:            # NaN
+        return text
+    if number.is_integer():
+        return str(int(number))
+    return text

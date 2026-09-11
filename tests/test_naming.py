@@ -93,3 +93,29 @@ def test_intermediate_name_round_trips(cohort):
 
 def test_parse_intermediate_rejects_other_files():
     assert parse_intermediate_filename("sorsim_output207_1.csv") is None
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (1432, "1432"),
+        (1432.0, "1432"),          # the September 2026 Jurapark delivery, float64
+        ("1432", "1432"),
+        ("1432.0", "1432"),
+        (" 1432 ", "1432"),
+        (720900.0, "720900"),      # the large ids that were reported missing
+    ],
+)
+def test_stand_key_canonicalises_both_sides_of_the_join(value, expected):
+    """A file name parses to "1432"; fsID may be int or float depending on the
+    delivery. str(1432.0) is "1432.0", which matches nothing -- so every stand
+    reads as missing and stage 1 excludes the entire region."""
+    from naming import stand_key
+    assert stand_key(value) == expected
+
+
+def test_stand_key_leaves_non_numeric_ids_alone():
+    """A region using letters in its ids must keep working."""
+    from naming import stand_key
+    assert stand_key("A12") == "A12"
+    assert stand_key("") == ""

@@ -37,7 +37,7 @@ module load stack/2024-06 python/3.12.8
 module load stack/2024-06 openjdk/21.0.3_9   # stage 1 only
 
 git pull
-python -m pytest ../                              # 184 tests, ~12 s
+python -m pytest ../                              # 193 tests, ~12 s
 python preflight.py Jurapark WOOD dead            # exits 1 if the run would fail
 ./run_conversion.sh WOOD Jurapark dead            # stage 1  → assortments
 ./run_analysis.sh  Jurapark WOOD dead             # stage 2  → summaries + figures
@@ -115,7 +115,7 @@ code/                       the pipeline
 minimal/     the ForClim→SorSim converter and the vendored SorSim jar + Java sources
 data/        reference data, tracked; simulation data, ignored (see the inventory)
 figures/     generated PNGs — git-ignored, reproducible via code/plot_only.py
-tests/       184 pytest tests, pure Python, ~12 s
+tests/       193 pytest tests, pure Python, ~12 s
 docs/        the documents below
 ```
 

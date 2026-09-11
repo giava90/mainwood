@@ -27,7 +27,7 @@ import sys
 import exclusions
 import paths
 import regions
-from naming import COHORTS, parse_forclim_filename
+from naming import COHORTS, parse_forclim_filename, stand_key
 
 OK, WARN, FAIL = "ok  ", "warn", "FAIL"
 
@@ -129,7 +129,7 @@ def check_stand_details(case_study, folder, cohort, scenario=None,
         findings.append((WARN, f"{len(stands)} stands listed; input folder absent, join not checked"))
         return findings
 
-    known = set(stands["fsID"].astype(str))
+    known = {stand_key(v) for v in stands["fsID"]}
     seen, unknown = set(), set()
     file_counts, examples = {}, {}
     for entry in os.scandir(folder):

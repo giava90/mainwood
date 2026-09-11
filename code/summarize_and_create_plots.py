@@ -15,6 +15,7 @@ from collections import defaultdict
 from summary_io import SUMMARY_FORMATS, write_summary
 import paths
 import regions
+from naming import stand_key
 
 import pdb
 
@@ -382,27 +383,32 @@ def augment_with_stand_data(summaries, stand_data):
         print("Warning: One or both input DataFrames are empty, no stand data augmentation performed.")
         return summaries
 
-    # Check for missing stands (optional, as the original code did)
+    # Both sides through stand_key: fsID dtype varies between ForClim deliveries,
+    # and a float column indexes as "1432.0" against a summary stand of "1432".
+    # The old check compared int(stand) against the raw values, which matched
+    # numerically even when the string index below did not -- so a total join
+    # failure reported nothing here and surfaced as NaN areas much later.
+    known_stands = {stand_key(v) for v in stand_data["fsID"]}
     for stand in summaries["stand"].unique():
-        if int(stand) not in stand_data["fsID"].values:
+        if stand_key(stand) not in known_stands:
             print(f"Stand {stand} not found in stand data")
     #stand_to_else = stand_data[["fsID", "Above1000m", "n.patches", "area"]].copy()
     col_to_keep = ["fsID", "area_ha"]
     if "Above1000m" in  stand_data.columns:
         col_to_keep = col_to_keep + ["Above1000m"]
     stand_to_else = stand_data[col_to_keep].copy()
-    stand_to_else.index = stand_to_else["fsID"].astype(str)
+    stand_to_else.index = [stand_key(v) for v in stand_to_else["fsID"]]
     stand_to_else = stand_to_else.drop(columns=["fsID"])
     stand_to_else_dict = stand_to_else.to_dict()
 
     # Adding area and altitude to summaries
     if "Above1000m" in  stand_data.columns:
-        summaries["Above1000m"] = summaries["stand"].astype(str).map(stand_to_else_dict["Above1000m"])
+        summaries["Above1000m"] = summaries["stand"].map(stand_key).map(stand_to_else_dict["Above1000m"])
     # computing the simulated area
     #summaries["sim_area (m2)"] = summaries["stand"].astype(str).map(stand_to_else_dict["n.patches"]) * 625
     # the simulated area is always 100 patches of 625m2 each
     summaries["sim_area (m2)"] = 100 * 625
-    summaries["area"] = summaries["stand"].astype(str).map(stand_to_else_dict["area_ha"])
+    summaries["area"] = summaries["stand"].map(stand_key).map(stand_to_else_dict["area_ha"])
     # rescaling the volume according to the actual size of the stand
     # in the simulations, we have 100 patches of 625 m2 each
     # however, the actual area of the stand is different and saved in "area" column

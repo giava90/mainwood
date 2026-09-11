@@ -21,6 +21,8 @@ never stands whose numbers are merely surprising.
 import datetime as dt
 import os
 
+from naming import stand_key
+
 #: Reason codes written into the report. Stable strings -- downstream code and
 #: the ForClim side both read them.
 NOT_IN_STAND_DETAILS = "not in stand.details.csv"
@@ -61,9 +63,11 @@ def load_stand_areas(path):
     if "fsID" not in stands.columns or "area_ha" not in stands.columns:
         return None
 
+    # stand_key on both sides: fsID dtype is not stable across deliveries, and a
+    # float column makes every key "1432.0" against a file name's "1432".
     return {
-        str(fsid): area
-        for fsid, area in zip(stands["fsID"].astype(str), stands["area_ha"])
+        stand_key(fsid): area
+        for fsid, area in zip(stands["fsID"], stands["area_ha"])
     }
 
 
