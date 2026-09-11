@@ -110,7 +110,25 @@ is kept only for the `inputs/` side of a laptop copy.)
 
 ### 1.3 Provide `stand.details.csv`
 
-`../data/<Region>/stand.details.csv` must have:
+This file is the join key and the area column behind **every volume in the summary**,
+so it is the one input worth checking before a long run.
+
+The files under `data/<region>/stand.details.csv` are *copies* of a ForClim delivery
+folder (`manag4giacomo`). A copy goes stale silently — the committed Vaud one predated
+the `area_ha` column entirely, so it had no area to rescale by at all, and nothing in
+the pipeline said so. Prefer reading the delivery directly:
+
+```bash
+ls /cluster/work/climate/amauri/manag4giacomo/      # check the real layout first
+```
+
+then in `code/local.env`:
+
+```bash
+MAINWOOD_STAND_DETAILS='/cluster/work/climate/amauri/manag4giacomo/{case_study}/stand.details.csv'
+```
+
+Required columns:
 
 | column | required | used for |
 |---|---|---|
@@ -118,18 +136,16 @@ is kept only for the `inputs/` side of a laptop copy.)
 | `area_ha` | **yes** | rescaling patch volumes to the real stand area |
 | `Above1000m` | no | the altitude split (only if you want those figures) |
 
-Check the join before launching an 8-hour job — a stand that is missing only prints a
-warning and silently produces `NaN` volumes:
+Check it with preflight rather than by eye — it verifies the columns, flags missing or
+zero areas, confirms every stand on disk joins, and prints the area total:
 
 ```bash
-python - <<'EOF'
-import pandas as pd
-s = pd.read_csv("../data/<Region>/stand.details.csv")
-assert {"fsID", "area_ha"} <= set(s.columns), sorted(s.columns)
-assert s["area_ha"].notna().all() and (s["area_ha"] > 0).all()
-print(len(s), "stands, area_ha total:", s["area_ha"].sum())
-EOF
+python preflight.py <Region> WOOD dead
+# [ok  ] 2687 stands listed, 15,105.0 ha total, all 1 stands on disk join
 ```
+
+That total is what every volume gets scaled by. Check it against the figure the ForClim
+side quotes; if it disagrees, you have the wrong delivery.
 
 ### 1.4 Point at the ForClim results
 

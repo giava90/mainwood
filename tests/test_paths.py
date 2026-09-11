@@ -126,3 +126,44 @@ def test_local_env_skips_keys_the_shell_cannot_assign(no_env):
     parsed = paths.load_local_env(str(env_file))
     assert "BAD-KEY" not in parsed
     assert parsed["GOOD_KEY"] == "y"
+
+
+def test_stand_details_defaults_to_the_repository_copy(no_env):
+    """The path summarize_and_create_plots hardcoded before it was configurable."""
+    assert paths.stand_details_path("Vaud") == "../data/Vaud/stand.details.csv"
+
+
+def test_stand_details_is_a_file_path_not_a_folder(no_env, monkeypatch):
+    """expand() appends a separator for folders; this one must not get one."""
+    monkeypatch.setenv("MAINWOOD_STAND_DETAILS", "/deliveries/{case_study}/stand.details.csv")
+    got = paths.stand_details_path("Jurapark")
+    assert got == "/deliveries/Jurapark/stand.details.csv"
+    assert not got.endswith("/")
+
+
+def test_stand_details_can_point_at_the_delivery_folder(no_env, monkeypatch):
+    """The copies in data/ are copies of a ForClim delivery; reading it directly
+    is what stops one of them going stale, as the Vaud file did."""
+    monkeypatch.setenv(
+        "MAINWOOD_STAND_DETAILS",
+        "/cluster/work/climate/amauri/manag4giacomo/{case_study}/stand.details.csv",
+    )
+    assert paths.stand_details_path("Surselva") == (
+        "/cluster/work/climate/amauri/manag4giacomo/Surselva/stand.details.csv"
+    )
+
+
+def test_stage_two_and_preflight_resolve_the_same_file(no_env, monkeypatch):
+    """The regression: preflight checked MAINWOOD_DATA_ROOT while stage 2 read
+    ../data/, so on Euler they inspected different files -- or preflight passed
+    against a file stage 2 never opened."""
+    monkeypatch.setenv("MAINWOOD_DATA_ROOT", "/cluster/scratch/giacomov/mainwood/")
+    monkeypatch.setenv("MAINWOOD_STAND_DETAILS", "/deliveries/{case_study}/stand.details.csv")
+
+    import preflight
+    import summarize_and_create_plots
+
+    expected = paths.stand_details_path("Vaud")
+    assert preflight.paths.stand_details_path("Vaud") == expected
+    assert summarize_and_create_plots.paths.stand_details_path("Vaud") == expected
+    assert "/cluster/scratch/" not in expected

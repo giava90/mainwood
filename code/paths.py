@@ -37,6 +37,7 @@ DEFAULTS = {
     "MAINWOOD_INTERMEDIATE_TEMPLATE": "../data/{case_study}/intermediate/{scenario}/",
     "MAINWOOD_OUTPUT_TEMPLATE": "../data/{case_study}/",
     "MAINWOOD_DATA_ROOT": "../data",
+    "MAINWOOD_STAND_DETAILS": "../data/{case_study}/stand.details.csv",
     "MAINWOOD_SAMPLE_SIZE": "50",
 }
 
@@ -108,7 +109,7 @@ def setting(name, local_env=None):
     return DEFAULTS[name]
 
 
-def expand(template, case_study, scenario, cohort="dead"):
+def expand(template, case_study, scenario, cohort="dead", trailing_slash=True):
     """Fill a path template, failing loudly on an unknown placeholder.
 
     A typo such as ``{region}`` would otherwise reach ``os.scandir`` as a
@@ -120,8 +121,12 @@ def expand(template, case_study, scenario, cohort="dead"):
         scenario (str): Management scenario.
         cohort (str): ``dead`` or ``alive``.
 
+    Args:
+        trailing_slash (bool): Append a separator. True for folders, which callers
+            join to by concatenation; False for a file path.
+
     Returns:
-        str: The expanded path, with a trailing separator.
+        str: The expanded path.
 
     Raises:
         ValueError: If the template contains a placeholder we do not define.
@@ -134,6 +139,8 @@ def expand(template, case_study, scenario, cohort="dead"):
             f"Unknown placeholder {exc} in path template {template!r}. "
             f"Available placeholders: {', '.join('{' + p + '}' for p in PLACEHOLDERS)}."
         ) from exc
+    if not trailing_slash:
+        return expanded
     return expanded if expanded.endswith(("/", os.sep)) else expanded + "/"
 
 
@@ -155,6 +162,25 @@ def output_folder(case_study, scenario, cohort="dead", local_env=None):
 def data_root(local_env=None):
     """Stage 2's ``folder_data``: the root holding ``<region>/outputs/<scenario>/``."""
     return setting("MAINWOOD_DATA_ROOT", local_env)
+
+
+def stand_details_path(case_study, local_env=None):
+    """The ``stand.details.csv`` for one region -- a file path, not a folder.
+
+    This is the join key and the area column behind every volume in the summary,
+    so stage 2 and preflight have to agree on which file they mean. They did not:
+    ``summarize_and_create_plots`` hardcoded ``../data/<region>/stand.details.csv``
+    while ``preflight`` looked under ``MAINWOOD_DATA_ROOT``, which on Euler is
+    ``/cluster/scratch/...`` -- a different file, or none. Both now come here.
+
+    The repository copies are copies of a ForClim delivery folder, and the Vaud one
+    had gone stale without anyone noticing (it predated the ``area_ha`` column).
+    Point this at the delivery folder to stop copying altogether:
+
+        MAINWOOD_STAND_DETAILS='/cluster/work/.../manag4giacomo/{case_study}/stand.details.csv'
+    """
+    template = setting("MAINWOOD_STAND_DETAILS", local_env)
+    return expand(template, case_study, scenario="", cohort="", trailing_slash=False)
 
 
 def sample_size(local_env=None):

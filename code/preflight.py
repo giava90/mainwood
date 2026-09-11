@@ -67,7 +67,7 @@ def check_stand_details(case_study, folder, cohort, sample_limit=2000):
     """
     import pandas as pd
 
-    path = os.path.join(paths.data_root(), case_study, "stand.details.csv")
+    path = paths.stand_details_path(case_study)
     if not os.path.isfile(path):
         return [(FAIL, f"missing {path}")]
 

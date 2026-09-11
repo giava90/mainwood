@@ -13,6 +13,7 @@ from multiprocessing import Pool
 from collections import defaultdict
 
 from summary_io import SUMMARY_FORMATS, write_summary
+import paths
 import regions
 
 import pdb
@@ -1272,7 +1273,8 @@ def process_combination(args):
         case_study, management, folder_path, start_time, sample, num_cores, cohort, summary_format = args
     # --- Configuration ---
     folder_path = f"{folder_path}/{case_study}/outputs/{management}/"
-    stand_data_path = f"../data/{case_study}/stand.details.csv"
+    # Resolved through paths so preflight checks the same file stage 2 reads.
+    stand_data_path = paths.stand_details_path(case_study)
     quality_data_path = "../data/fraction_quality.xlsx"
 
     soft_species = ['Tanne', "Loerche", "Fichte", "Foehre", "Ubrige Nadelholz"]
