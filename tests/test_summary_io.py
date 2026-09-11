@@ -186,3 +186,35 @@ def test_converter_handles_a_whole_folder(summaries, tmp_path):
     out_dir = tmp_path / "out"
     run_converter(str(tmp_path), "-o", str(out_dir))
     assert sorted(p.name for p in out_dir.glob("*.csv")) == ["Vaud_BAU.csv", "Vaud_WOOD.csv"]
+
+
+def test_parquet_falls_back_to_csv_when_pyarrow_is_missing(tmp_path, monkeypatch, capsys):
+    """Stage 2 imports pyarrow only at the final write, and it is absent from the
+    Euler module stack -- so this is the difference between keeping hours of
+    finished work and losing all of it. The fallback is loud, and find_summary
+    picks the file up either way."""
+    import pandas as pd
+
+    import summary_io
+
+    frame = pd.DataFrame({"stand": ["42"], "volume": [1.5]})
+    base = str(tmp_path / "Jurapark_WOOD")
+
+    def no_pyarrow(*args, **kwargs):
+        raise ImportError("No module named 'pyarrow'")
+
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", no_pyarrow)
+
+    written = summary_io.write_summary(frame, base, fmt="parquet")
+
+    assert written.endswith(".csv")
+    assert os.path.isfile(written)
+    assert summary_io.find_summary(base) == written
+
+    out = capsys.readouterr().out
+    assert "pyarrow is not installed" in out
+    assert "has been written as CSV instead" in out
+
+    back = pd.read_csv(written, index_col=0)
+    assert back["stand"].astype(str).tolist() == ["42"]
+    assert back["volume"].tolist() == [1.5]

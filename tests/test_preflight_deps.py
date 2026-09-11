@@ -55,6 +55,22 @@ def test_missing_openpyxl_blocks_any_format(without):
         assert "openpyxl" in " ".join(m for _, m in findings)
 
 
-def test_a_complete_environment_passes():
+def test_a_complete_environment_passes(monkeypatch):
+    """Both packages importable -> nothing blocks.
+
+    Simulated rather than observed. An earlier version of this test asserted that
+    *this* machine had pyarrow, so it failed on Euler -- the one environment the
+    whole check exists to describe. A test of the gate must not depend on which
+    side of the gate the machine running it is on.
+    """
+    real = importlib.util.find_spec
+
+    def everything_present(name, *args, **kwargs):
+        if name in ("pyarrow", "openpyxl"):
+            return object()
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", everything_present)
+
     findings = preflight.check_summary_dependencies("parquet")
     assert preflight.FAIL not in statuses(findings)

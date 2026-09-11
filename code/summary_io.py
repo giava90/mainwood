@@ -66,10 +66,28 @@ def write_summary(summaries, base_path, fmt="parquet", compression=DEFAULT_COMPR
     path = summary_path(base_path, fmt)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     if fmt == "parquet":
-        # index=False: the old CSVs carried a meaningless RangeIndex as an unnamed
-        # first column. summary_to_csv.py writes it back when converting, so the
-        # CSV a collaborator receives still looks the way it always did.
-        summaries.to_parquet(path, index=False, compression=compression)
+        try:
+            # index=False: the old CSVs carried a meaningless RangeIndex as an
+            # unnamed first column. summary_to_csv.py writes it back when
+            # converting, so the CSV a collaborator receives still looks the way
+            # it always did.
+            summaries.to_parquet(path, index=False, compression=compression)
+        except ImportError:
+            # pyarrow is imported here, at the very end of stage 2, and it is not
+            # in the Euler module stack. Losing hours of completed work to a
+            # missing writer is worse than writing the other format, and
+            # find_summary() looks for either extension -- so the result stays
+            # readable by plot_only and by read_summaries.R. Loud, never silent.
+            path = summary_path(base_path, "csv")
+            summaries.to_csv(path)
+            print("")
+            print("*** pyarrow is not installed, so the summary could not be written")
+            print("*** as Parquet. It has been written as CSV instead, to")
+            print(f"***   {path}")
+            print("*** The numbers are identical and plot_only reads either format.")
+            print("*** For Parquet: pip install --user pyarrow, then re-run stage 2.")
+            print("*** Run code/preflight.py before a job to catch this up front.")
+            print("")
     else:
         summaries.to_csv(path)
     return path
