@@ -28,6 +28,7 @@ import sys
 import datetime as dt
 from multiprocessing import Pool, Manager
 
+import exclusions
 import paths
 import regions
 from naming import (
@@ -204,6 +205,28 @@ def process_combination(cs, ms, input_folder_path, output_folder_path, num_cores
     # SorSim and fail halfway through the run
     files = [f for f in files if parse_forclim_filename(f, cs, cohort) is not None]
     print("Of those,", len(files), f"match the {cohort}-cohort naming convention")
+
+    # Drop stands that cannot be computed before SorSim runs, rather than after:
+    # a stand missing from stand.details.csv yields NaN volumes and one whose
+    # area_ha is <= 0 yields a confident zero, and neither is worth cluster time.
+    # The report lists them for the ForClim side and for a later re-run.
+    matched = len(files)
+    areas = exclusions.load_stand_areas(paths.stand_details_path(cs))
+    if areas is None:
+        print("No usable stand.details.csv for", cs, "-- nothing excluded, "
+              "and stage 2 will not be able to rescale volumes.")
+    files, excluded_rows = exclusions.partition(
+        files, lambda name: parse_forclim_filename(name, cs, cohort),
+        areas, cs, ms, cohort,
+    )
+    summary = exclusions.summarise(excluded_rows, len(files), matched)
+    if summary:
+        print(summary)
+    written = exclusions.write_report(
+        exclusions.report_path(output_folder_path, cs, ms, cohort), excluded_rows
+    )
+    if written:
+        print("Excluded stands written to", written)
 
     failed_files = process_files(
         files,

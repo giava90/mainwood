@@ -16,9 +16,11 @@ import sys
 import datetime as dt
 from multiprocessing import Pool, Manager
 
+import exclusions
 import paths
 import regions
 from naming import (
+    COHORTS,
     intermediate_filename,
     parse_intermediate_filename,
     sorsim_output_filename,
@@ -149,8 +151,37 @@ def process_combination(cs, ms, input_folder_path, output_folder_path, num_cores
     
     files = get_files_in_folder(input_folder_path)
     print("We have", len(files), "files to be processed (if sample == True, then only 40)")
-    
-    #keep only files that have the 
+
+    # Apply the same exclusion rule as stage 1. Tree lists written before the rule
+    # existed can still contain stands that cannot be computed, and re-running
+    # SorSim over them would put exactly the rows back that stage 1 now leaves out.
+    # The cohort lives in each tree list name, so the report is written per cohort.
+    matched = len(files)
+    areas = exclusions.load_stand_areas(paths.stand_details_path(cs))
+    for cohort in COHORTS:
+        def stand_of(name, cohort=cohort):
+            parsed = parse_intermediate_filename(name)
+            if parsed is None or parsed[0] != cohort:
+                return None
+            return (parsed[1], parsed[2])
+
+        of_cohort = [f for f in files if stand_of(f) is not None]
+        if not of_cohort:
+            continue
+        kept, rows = exclusions.partition(of_cohort, stand_of, areas, cs, ms, cohort)
+        dropped = set(of_cohort) - set(kept)
+        if dropped:
+            files = [f for f in files if f not in dropped]
+        summary = exclusions.summarise(rows, len(kept), len(of_cohort))
+        if summary:
+            print(summary)
+        written = exclusions.write_report(
+            exclusions.report_path(output_folder_path, cs, ms, cohort), rows
+        )
+        if written:
+            print("Excluded stands written to", written)
+    if len(files) != matched:
+        print(f"{len(files)} of {matched} tree lists will be re-run.")
 
     failed_files = process_files(
         files,

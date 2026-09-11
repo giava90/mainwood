@@ -279,6 +279,51 @@ ls "$root"/intermediate/BAU | wc -l            # should be 0 (unless save_interm
 A non-empty `intermediate/` means the run was interrupted — use step 4 rather than
 redoing the conversion.
 
+## 2.5 Stands that were excluded
+
+Stage 1 drops stands it cannot compute **before** SorSim runs, so no cluster time
+goes into a result that would be discarded. Two rules, both about the area used to
+rescale patch volumes:
+
+| reason | what it was doing before |
+|---|---|
+| `area_ha <= 0` (or `NaN`) | produced a confident `0`, indistinguishable from a stand that genuinely harvested nothing, and dragged down every per-stand mean |
+| `not in stand.details.csv` | produced `NaN` volumes after a single printed warning |
+
+Each run writes the list to the region root — **not** into `outputs/<scenario>/`,
+which stage 2 reads in full:
+
+```
+<MAINWOOD_OUTPUT_TEMPLATE>/excluded_stands_<Region>_<scenario>_<cohort>.csv
+```
+
+```
+stand  reason                    area_ha  n_files  example_file                       ...
+2501   area_ha <= 0              0.0      2        dataSim.dead2501_1_planted_00.csv
+999    not in stand.details.csv           2        dataSim.dead999_1_planted_00.csv
+```
+
+That file is the list to hand back to the ForClim side, and the list to re-run once
+corrected data arrives — delete nothing, just re-run stage 1 for the region and the
+report shrinks. If **nothing** is excluded the file is removed rather than left
+behind, so a stale report is never mistaken for a current one.
+
+The job log carries the same thing in short form:
+
+```
+Excluded 2 stand(s) covering 4 file(s); 2 of 6 files will be processed.
+  area_ha <= 0: 1 stand(s) -- 2501
+  not in stand.details.csv: 1 stand(s) -- 999
+```
+
+`convert_data_from_intermediate.py` applies the same rule, per cohort, so re-running
+SorSim over tree lists written before the rule existed does not put the excluded
+stands back.
+
+**If `stand.details.csv` cannot be read at all** — missing, or no `area_ha` column,
+as the old Vaud delivery had — nothing is excluded and the run says so. Dropping
+every stand in that case would look like a successful empty run.
+
 ## 3. Stage 2 — summaries and figures
 
 ```bash
