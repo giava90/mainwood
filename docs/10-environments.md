@@ -1,7 +1,7 @@
 # Environments
 
 What is installed on this machine, what was broken, and how it was fixed
-(2026-09-10). Euler is unaffected by any of this — there the module stack provides
+(2026-09-10 / 2026-09-11). Euler is unaffected by any of this — there the module stack provides
 everything (`module load stack/2024-06 python/3.12.8`).
 
 ## Python: the conda `base` environment
@@ -63,11 +63,44 @@ this repository passes in `base` (111 tests).
 ### Still broken in `base`, and why
 
 `darts 0.31.0` declares `numpy<2.0.0`. That is the package's own constraint, not an ABI
-problem — it cannot be fixed without either downgrading numpy or upgrading darts. If you
-need darts, give it its own environment rather than moving `base` back to numpy 1.
+problem — the answer is a newer darts, not an older numpy. It now has its own environment
+(below). If you would rather have it in `base` as well,
+`pip install -c pin.txt "u8darts>=0.47"` should do it, but a forecasting stack is exactly
+the kind of thing worth keeping out of `base`.
 
 If you truly want a source build of matplotlib against your numpy, that needs MSVC Build
 Tools plus freetype/qhull; the wheel route above achieves the same ABI result.
+
+## The `darts` environment
+
+Created 2026-09-11, so darts has somewhere to live that is not `base`:
+
+```bash
+conda create -n darts -c conda-forge python=3.11 u8darts
+```
+
+| | |
+|---|---|
+| python | 3.11.16 |
+| darts | **0.47.0** |
+| numpy | 2.4.6 |
+| pandas | 3.0.5 |
+
+Verified by fitting `NaiveSeasonal` and `ExponentialSmoothing` on a synthetic monthly
+series and scoring the holdout (MAPE 8.63%). Note that darts 0.47 runs happily on
+**numpy 2 and pandas 3** — the `numpy<2` pin was purely an artefact of the old 0.31.0.
+
+Use it through activation:
+
+```bash
+conda activate darts
+# or, without activating:
+conda run -n darts python your_script.py
+```
+
+Calling `envs\darts\python.exe` directly **fails with exit code 127** — a conda env on
+Windows needs its `Libraryin` directories on `PATH` before the interpreter can load its
+DLLs. `conda activate` and `conda run` both do that; a bare path to the exe does not.
 
 ## R and RStudio
 
@@ -95,15 +128,15 @@ Packages installed there: **arrow 25.0.1**, readr 2.2.0, dplyr 1.2.1, nanoparque
 RStudio finds R 4.6.1 by itself; nothing further is needed to open it and
 `source("code/read_summaries.R")`.
 
-### Two leftovers to decide about
+### Two conda envs removed (2026-09-11)
 
-- **`rstudio` conda env** — the broken 2019 R. Nothing uses it now.
-  `conda env remove -n rstudio` if you agree.
-- **`r-mainwood` conda env (2.4 GB)** — created as a fallback R+arrow while the winget
-  installs were running. Redundant now that the CRAN R works.
-  `conda env remove -n r-mainwood` if you agree.
+Both were superseded by the CRAN R above and are gone:
 
-Neither was removed; that is your call.
+- **`rstudio`** — the broken 2019 R.
+- **`r-mainwood`** (2.4 GB) — a fallback R+arrow env created while the winget installs
+  were running.
+
+About 2.5 GB freed. R 4.6.1, RStudio and the `arrow` library are unaffected.
 
 ## Which interpreter for what
 
@@ -111,7 +144,7 @@ Neither was removed; that is your call.
 |---|---|
 | the pipeline, the tests | `base` (now healthy) or the Euler module stack |
 | reading summaries in R | `...\R-4.6.1\bin\x64\Rscript.exe`, or RStudio |
-| anything needing numpy < 2 (darts) | a separate env |
+| darts / forecasting | `conda activate darts` |
 
 The repository's dependencies are in `requirements.txt`; the R side needs only `arrow`
 (or `nanoparquet`), plus `readr`/`dplyr` for the convenience paths.
