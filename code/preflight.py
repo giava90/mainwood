@@ -23,10 +23,8 @@ import os
 import sys
 
 import paths
+import regions
 from naming import COHORTS, parse_forclim_filename
-
-VALID_SCENARIOS = ["BAU", "WOOD", "HYBRID", "BIO"]
-VALID_CASE_STUDIES = ["Entlebuch", "Vaud", "Surselva", "Misox"]
 
 OK, WARN, FAIL = "ok  ", "warn", "FAIL"
 
@@ -148,8 +146,10 @@ def main(argv):
     if cohort not in COHORTS:
         raise SystemExit(f"Invalid cohort {cohort!r}; expected one of {list(COHORTS)}.")
 
-    case_studies = VALID_CASE_STUDIES if case_study_input == "All" else [case_study_input]
-    scenarios = VALID_SCENARIOS if scenario_input == "ALL" else [scenario_input]
+    regions.check_case_study(case_study_input)
+    regions.check_scenario(scenario_input)
+    case_studies = regions.resolve_case_studies(case_study_input)
+    scenarios = regions.resolve_scenarios(scenario_input)
 
     local_env = paths.load_local_env()
     print("Configuration:")

@@ -13,6 +13,7 @@ from multiprocessing import Pool
 from collections import defaultdict
 
 from summary_io import SUMMARY_FORMATS, write_summary
+import regions
 
 import pdb
 
@@ -1397,12 +1398,8 @@ if __name__ == "__main__":
     print("Number of cores to be used ", num_cores)
     print("The sample size is ", sample_size)
     # check that the argument is valid
-    valid_management_scenarios = ["BAU", "WOOD", "BIO", "ALL", "HYBRID"]
-    valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "Misox", "All"]
-    if case_study_input not in valid_case_studies:
-        raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
-    if management_input not in valid_management_scenarios:
-        raise ValueError(f"Invalid management scenario. Please provide a valid management scenario {valid_management_scenarios}.")
+    regions.check_case_study(case_study_input)
+    regions.check_scenario(management_input)
     if cohort_input not in ("dead", "alive"):
         raise ValueError("Invalid cohort. Please provide 'dead' or 'alive'.")
     if summary_format_input not in SUMMARY_FORMATS:
@@ -1416,8 +1413,8 @@ if __name__ == "__main__":
         sample_size = False
 
      # Select what to run
-    case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study_input == "All" else [case_study_input]
-    scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_input == "ALL" else [management_input]
+    case_studies_to_run = regions.resolve_case_studies(case_study_input)
+    scenarios_to_run = regions.resolve_scenarios(management_input)
     combinations = [(cs, ms, folder_path, start_time, sample_size, num_cores, cohort_input, summary_format_input)
                     for cs in case_studies_to_run for ms in scenarios_to_run]
 

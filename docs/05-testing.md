@@ -1,7 +1,7 @@
 # Tests
 
 ```bash
-python -m pytest          # from the repository root, ~10 s, 119 tests
+python -m pytest          # from the repository root, ~11 s, 132 tests
 ```
 
 Pure Python — no Java, no SLURM, no data beyond what is in the repository. The suite runs
@@ -23,6 +23,7 @@ numbers that are off by a constant factor. The tests target exactly those failur
 | `test_summary_end_to_end.py` | the whole read chain on a real SorSim file | Marker detection and the replacement-character round trip |
 | `test_optimised_paths.py` | the vectorised replacements | A fast path that quietly disagrees with the per-row version it replaced |
 | `test_summary_io.py` | the Parquet/CSV deliverable and the converter | Handing collaborators a CSV that differs from the one their R pipeline expects |
+| `test_regions.py` | `code/regions.py` | A region registered in some entry points but not others — the run then aborts on an argument check hours after you thought you were done |
 | `test_paths.py` | `code/paths.py` per-machine path templates | A laptop-vs-Euler path edit leaking into a tracked file, or a typo'd placeholder silently reading an empty folder |
 
 ## The R side

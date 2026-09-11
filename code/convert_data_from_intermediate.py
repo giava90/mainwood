@@ -17,6 +17,7 @@ import datetime as dt
 from multiprocessing import Pool, Manager
 
 import paths
+import regions
 from naming import (
     intermediate_filename,
     parse_intermediate_filename,
@@ -183,20 +184,16 @@ if __name__ == "__main__":
     print("Using a sample ", use_sample)
     print("Save intermediate files as zip ", save_intermediate)
     # check that the argument is valid
-    valid_management_scenarios = ["BAU", "WOOD", "HYBRID", "ALL", "BIO"]
-    valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "All", "Misox"]
-    if case_study not in valid_case_studies:
-        raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
-    if management_scenario not in valid_management_scenarios:
-        raise ValueError(f"Invalid management scenario. Please provide a valid management scenario {valid_management_scenarios}.")
+    regions.check_case_study(case_study)
+    regions.check_scenario(management_scenario)
     if use_sample not in ["True", "False"]:
         raise ValueError("Invalid argument for use_sample. Please provide True or False.")
     if use_sample == "True":
         print("Using sample data...")
     
     # Select what to run
-    case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study == "All" else [case_study]
-    scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_scenario == "ALL" else [management_scenario]
+    case_studies_to_run = regions.resolve_case_studies(case_study)
+    scenarios_to_run = regions.resolve_scenarios(management_scenario)
 
     local_env = paths.load_local_env()
 

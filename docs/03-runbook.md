@@ -86,12 +86,20 @@ cp /cluster/scratch/giacomov/mainwood/summaries_for_plots/*.parquet ~/mainwood-s
 
 ### 1.1 Register the region
 
-`Jurapark` (or whatever the region is called) must be added to `valid_case_studies` in
-**both** entry points, and it must be spelled exactly as in the ForClim file names:
+One line in [`code/regions.py`](../code/regions.py) — it is the single list every entry
+point reads:
 
-- `code/convert_data.py` (`__main__`)
-- `code/summarize_and_create_plots.py` (`__main__`)
-- `code/plot_only.py` (`__main__`) if you will re-plot
+```python
+CASE_STUDIES = ("Entlebuch", "Vaud", "Surselva", "Misox", "Jurapark")
+```
+
+Spell it exactly as it appears in the ForClim file names; `naming.forclim_pattern`
+matches against this string.
+
+> Before 2026-09 this list was copy-pasted into five entry points, and they had already
+> drifted — `plot_only` silently dropped `HYBRID` while the others kept it. If you need a
+> script to support a narrower set, pass `exclude=` to `regions.valid_scenarios()` so the
+> exception stays visible instead of becoming a sixth divergent copy.
 
 ### 1.2 Folder skeleton
 

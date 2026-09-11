@@ -88,10 +88,11 @@ place: [`code/naming.py`](code/naming.py).
 ```
 code/        the pipeline (stage 1, stage 2, plotting, SLURM wrappers, preflight)
 code/local.env   per-machine paths — git-ignored, template in local.env.example
+code/regions.py  the one list of case study regions and scenarios
 minimal/     the ForClim→SorSim converter and the vendored SorSim jar + Java sources
 data/        reference data (kept) and simulation data (regenerable — see the inventory)
 figures/     generated PNGs — git-ignored, reproducible via code/plot_only.py
-tests/       119 pytest tests, pure Python, ~10 s
+tests/       132 pytest tests, pure Python, ~11 s
 docs/        the documents listed above
 ```
 

@@ -3,6 +3,7 @@ import pandas as pd
 import sys
 
 from summary_io import read_summary
+import regions
 import datetime as dt
 
 import pdb
@@ -287,8 +288,11 @@ if __name__ == "__main__":
     print("Number of cores to be used ", num_cores)
     print("The sample size is ", sample_size)
     # check that the argument is valid
-    valid_management_scenarios = ["BAU", "WOOD", "BIO", "ALL"] #, "HYBRID"]
-    valid_case_studies = ["Entlebuch", "Vaud", "Surselva", "Misox", "All"]
+    # plot_only has never plotted HYBRID; the exclusion is deliberate and stays
+    # visible here rather than hidden in a diverged copy of the region list.
+    NO_HYBRID = ("HYBRID",)
+    valid_management_scenarios = regions.valid_scenarios(exclude=NO_HYBRID)
+    valid_case_studies = regions.valid_case_studies()
     if case_study_input not in valid_case_studies:
         raise ValueError(f"Invalid case study. Please provide a valid case study {valid_case_studies}.")
     if management_input not in valid_management_scenarios:
