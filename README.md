@@ -92,7 +92,7 @@ code/regions.py  the one list of case study regions and scenarios
 minimal/     the ForClim→SorSim converter and the vendored SorSim jar + Java sources
 data/        reference data (kept) and simulation data (regenerable — see the inventory)
 figures/     generated PNGs — git-ignored, reproducible via code/plot_only.py
-tests/       151 pytest tests, pure Python, ~11 s
+tests/       155 pytest tests, pure Python, ~11 s
 docs/        the documents listed above
 ```
 

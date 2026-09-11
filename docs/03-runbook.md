@@ -51,8 +51,8 @@ python preflight.py Entlebuch WOOD dead     # ~10 s; exits 1 if the run would fa
 
 `preflight.py` checks the things that otherwise fail eight hours in: the input folder
 exists and holds files matching the cohort convention, `stand.details.csv` covers every
-stand on disk, the output tree exists (it creates it), and `java` is on `PATH`. Chain it
-so a failed check blocks the submission:
+stand on disk, the output tree exists (it creates it), `java` is on `PATH`, and the
+packages stage 2 needs are importable. Chain it so a failed check blocks the submission:
 
 ```bash
 python preflight.py Entlebuch WOOD dead && ./run_conversion.sh WOOD Entlebuch dead
@@ -201,6 +201,32 @@ names the alive cohort with a different token than `alive`, change `COHORT_TOKEN
 ls /cluster/work/climate/amauri/<Region>/Results/mgmt_BAU/*/ | head
 python preflight.py <Region> BAU dead    # confirms the template resolves to real files
 ```
+
+### Python packages on Euler
+
+The module stack does not carry everything. `pyarrow` in particular is needed for the
+**default** summary format, and it is imported only at the final write — so a missing
+one aborts stage 2 after all the work is done, not at the start.
+
+```bash
+python -c "import pyarrow, openpyxl; print('ok')"
+```
+
+If that fails, either install into your user site-packages:
+
+```bash
+pip install --user pyarrow openpyxl
+```
+
+or skip Parquet for that run — `run_analysis.sh` takes the format as its fifth argument:
+
+```bash
+./run_analysis.sh <Region> WOOD dead False csv
+```
+
+`preflight.py` checks both and refuses the run if either is missing. A quick way to tell
+whether your environment is complete: `python -m pytest ../` reporting a skip usually
+means a package is absent rather than a test being broken — `-rs` prints the reason.
 
 ## 2. Stage 1 — assortments
 

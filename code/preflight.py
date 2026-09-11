@@ -11,9 +11,10 @@ each one used to surface only after the job had been queued and started:
 * the output tree does not exist yet.
 
 Usage:
-    python preflight.py <case_study> <scenario> [cohort]
+    python preflight.py <case_study> <scenario> [cohort] [summary_format]
     python preflight.py Entlebuch WOOD
     python preflight.py All ALL alive
+    python preflight.py Jurapark WOOD dead csv
 
 Exit status is 0 if the run can proceed, 1 if anything would fail. Use it as a
 gate in a submit script: ``python preflight.py ... && ./run_conversion.sh ...``
@@ -140,6 +141,50 @@ def check_output_tree(output_folder_path, scenario):
     return OK, f"output tree ready: {outputs}"
 
 
+def check_summary_dependencies(summary_format="parquet"):
+    """Confirm stage 2 can write its output and read the quality table.
+
+    Both of these fail at the *end* of stage 2 -- after every file has been read
+    and summarised -- so an absent import costs the whole run. The Euler module
+    stack does not necessarily carry either: a checkout there skipped the 18
+    Parquet tests because pyarrow was missing, which is the same absence that
+    would abort a real run at the final write.
+
+    Args:
+        summary_format (str): The format stage 2 will write.
+
+    Returns:
+        list[tuple[str, str]]: One ``(status, message)`` per finding.
+    """
+    import importlib.util
+
+    findings = []
+
+    if summary_format == "parquet":
+        if importlib.util.find_spec("pyarrow") is None:
+            findings.append((FAIL, (
+                "summary format is parquet but pyarrow is not installed -- stage 2 "
+                "would fail at the final write, after all the work. Either "
+                "`pip install --user pyarrow`, or pass a format: "
+                "./run_analysis.sh <region> <scenario> dead False csv"
+            )))
+        else:
+            findings.append((OK, f"pyarrow available (summary format {summary_format})"))
+    else:
+        findings.append((OK, f"summary format {summary_format} needs no extra package"))
+
+    # stage 2 reads data/fraction_quality.xlsx through pandas -> openpyxl
+    if importlib.util.find_spec("openpyxl") is None:
+        findings.append((FAIL, (
+            "openpyxl is not installed -- stage 2 cannot read fraction_quality.xlsx "
+            "(the quality split). `pip install --user openpyxl`"
+        )))
+    else:
+        findings.append((OK, "openpyxl available (fraction_quality.xlsx)"))
+
+    return findings
+
+
 def check_java():
     """Stage 1 needs a JVM; on Euler that means the openjdk module is loaded."""
     import shutil
@@ -153,6 +198,7 @@ def main(argv):
     case_study_input = argv[1]
     scenario_input = argv[2]
     cohort = argv[3] if len(argv) > 3 else "dead"
+    summary_format = argv[4] if len(argv) > 4 else "parquet"
 
     if cohort not in COHORTS:
         raise SystemExit(f"Invalid cohort {cohort!r}; expected one of {list(COHORTS)}.")
@@ -172,6 +218,10 @@ def main(argv):
     java_status, java_message = check_java()
     print(f"[{java_status}] {java_message}")
     failures += java_status == FAIL
+
+    for status, message in check_summary_dependencies(summary_format):
+        print(f"[{status}] {message}")
+        failures += status == FAIL
 
     for cs in case_studies:
         for ms in scenarios:
