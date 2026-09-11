@@ -410,6 +410,40 @@ Both run concurrently and write to their own `outputs/<scenario>/`.
 > `inputs/WOOD/` while still accepting a `scenario` argument, so a non-WOOD run read
 > WOOD inputs and wrote them into the other scenario's output folder. Delete it.
 
+## 3.7 How stage 1 scales
+
+Nothing in this repository measures stage 1 throughput, so before committing a long
+walltime to a region nobody has converted before, measure it:
+
+```bash
+./scaling_benchmark.sh BAU Jurapark          # 3 core counts x 3 sample sizes = 9 jobs
+squeue -u $USER
+python plot_scaling.py                       # when they have finished
+```
+
+Defaults are `{5, 10, 20}` cores by `{40, 80, 200}` files, 8 h walltime each. Override
+either axis:
+
+```bash
+SCALING_CORES="5 20 48" SCALING_SAMPLES="100 500" ./scaling_benchmark.sh BAU Jurapark
+```
+
+Each point runs in **its own output tree**. Nine concurrent stage 1 jobs writing into one
+`outputs/<scenario>/` would overwrite each other's files and time each other's I/O, which
+measures the collision rather than the code. Each point also writes its own result file,
+so nine jobs finishing at once cannot interleave a line.
+
+`plot_scaling.py` prints the table and writes `<root>/scaling.png` with two panels: wall
+time, and throughput against an ideal-linear reference. **Throughput is the one to read** —
+wall time always falls with more cores, but throughput flattening is what tells you the
+extra cores stopped paying, and that is the number that decides `N_CORES` for the real run.
+
+The benchmark tree is disposable. Delete it when you have the plot:
+
+```bash
+rm -rf "$MAINWOOD_DATA_ROOT/scaling_Jurapark_BAU_dead"
+```
+
 ## 4. Re-running SorSim without re-converting
 
 Only if the tree lists are still in `intermediate/` (i.e. `save_intermediate=True`, or
