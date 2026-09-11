@@ -14,7 +14,7 @@ total is `data/summaries_for_plots/`.**
 | `code/plot_only.py` | Re-plots from an existing summary CSV — no SorSim reading | active |
 | `code/run_conversion.sh` | `sbatch` wrapper for stage 1 | active |
 | `code/run_analysis.sh` | `sbatch` wrapper for stage 2 | active |
-| `code/bash_code_to_create_folder_structure_for_data.sh` | `mkdir` skeleton for a new region | active, untracked — commit it |
+| `code/bash_code_to_create_folder_structure_for_data.sh` | `mkdir` skeleton for a new region | **superseded** by `code/setup_data_tree.py`, which reads the configured paths |
 | `code/SortimentsVorgabenListe.csv` | Copy of the SorSim assortment specification | duplicate of `minimal/SortimentsVorgabenListe.csv` and `minimal/sorsim/data/…`; not read by any script |
 | `minimal/functions/tools.py` | The real conversion logic + the py4j SorSim call | active — the scientific core |
 | `minimal/output_input_converter.py` | CLI wrapper around `tools.output_input_converter` | active |

@@ -1,5 +1,9 @@
 # Cleanup proposal
 
+> **Status (2026-09-11): partly executed.** Section B's `git rm --cached` has been
+> applied, and `README.txt` and the manual `mkdir` script are superseded. See
+> [11-changelog.md](11-changelog.md). The rest stands as a proposal.
+
 **Nothing in this document has been executed.** Every command is here for you to run
 (or not) yourself. Sizes are from 2026-09-10.
 
