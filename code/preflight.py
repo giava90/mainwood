@@ -74,7 +74,12 @@ def check_stand_details(case_study, folder, cohort, sample_limit=2000):
     stands = pd.read_csv(path)
     missing_cols = {"fsID", "area_ha"} - set(stands.columns)
     if missing_cols:
-        return [(FAIL, f"{path} lacks required column(s): {sorted(missing_cols)}")]
+        return [(FAIL, (
+            f"{path} lacks required column(s): {sorted(missing_cols)}. "
+            f"It has {sorted(stands.columns)[:6]}... -- this looks like an older "
+            f"delivery from the ForClim side; stage 2 cannot rescale patch volumes "
+            f"to stand area without area_ha."
+        ))]
 
     findings = []
 
@@ -115,7 +120,13 @@ def check_stand_details(case_study, folder, cohort, sample_limit=2000):
             f"would give NaN volumes"
         )))
     else:
-        findings.append((OK, f"{len(stands)} stands listed, all {len(seen)} stands on disk join"))
+        # The area total is the number every volume in the summary is scaled by, so
+        # print it: it is the one value worth checking against what the ForClim side
+        # said they sent, and a swapped-in file shows up here immediately.
+        findings.append((OK, (
+            f"{len(stands)} stands listed, {stands['area_ha'].sum():,.1f} ha total, "
+            f"all {len(seen)} stands on disk join"
+        )))
     return findings
 
 
