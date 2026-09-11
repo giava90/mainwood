@@ -33,22 +33,38 @@ figures/*.png
 
 ## Quick start
 
+Once per machine — paths live in `code/local.env`, which is git-ignored, so `git pull`
+on Euler never conflicts and no tracked file is edited to switch machine or region:
+
+```bash
+cd code
+cp local.env.example local.env      # uncomment the Euler block
+```
+
+Then every run is the same four commands:
+
 ```bash
 cd code
 module load stack/2024-06 python/3.12.8
-module load stack/2024-06 openjdk/21.0.3_9
+module load stack/2024-06 openjdk/21.0.3_9   # stage 1 only
 
-# stage 1 — dead cohort (harvested trees), 50-file sample
-python convert_data.py WOOD True 4 False Entlebuch
+git pull
+python preflight.py Entlebuch WOOD dead      # ~10 s; exits 1 if the run would fail
+./run_conversion.sh WOOD Entlebuch dead      # stage 1  → assortments
+./run_analysis.sh  Entlebuch WOOD dead       # stage 2  → summaries + figures
+```
 
-# stage 1 — alive cohort (standing stock)
-python convert_data.py WOOD True 4 False Entlebuch alive
+Region, scenario and cohort are arguments; sbatch resources are environment variables
+(`N_CORES=8 CONVERT_WALLTIME=24:00:00 ./run_conversion.sh ALL All`). Neither wrapper
+is ever edited. Full details in [docs/03-runbook.md](docs/03-runbook.md).
 
-# stage 2 — summaries + figures (Parquet by default; add "csv" for CSV)
+Interactively, without SLURM:
+
+```bash
+python convert_data.py WOOD True 4 False Entlebuch          # 50-file sample, dead
+python convert_data.py WOOD True 4 False Entlebuch alive    # alive cohort
 python summarize_and_create_plots.py Entlebuch WOOD ../data 4 100
-
-# hand the summaries to a collaborator whose pipeline reads CSV
-python summary_to_csv.py ../data/summaries_for_plots/ --gzip
+python summary_to_csv.py ../data/summaries_for_plots/ --gzip   # CSV for collaborators
 ```
 
 Run tests from the repository root:
@@ -70,11 +86,12 @@ place: [`code/naming.py`](code/naming.py).
 ## Layout
 
 ```
-code/        the pipeline (stage 1, stage 2, plotting, SLURM wrappers)
+code/        the pipeline (stage 1, stage 2, plotting, SLURM wrappers, preflight)
+code/local.env   per-machine paths — git-ignored, template in local.env.example
 minimal/     the ForClim→SorSim converter and the vendored SorSim jar + Java sources
 data/        reference data (kept) and simulation data (regenerable — see the inventory)
 figures/     generated PNGs — git-ignored, reproducible via code/plot_only.py
-tests/       111 pytest tests, pure Python, ~8 s
+tests/       119 pytest tests, pure Python, ~10 s
 docs/        the documents listed above
 ```
 

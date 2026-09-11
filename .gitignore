@@ -4,3 +4,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 output.png
+
+# Per-machine configuration: paths and sbatch defaults. Template is
+# code/local.env.example. Keeping this untracked is what makes `git pull`
+# on Euler conflict-free.
+code/local.env
+
+# SLURM job logs written next to the wrappers
+code/slurm-*.out
+*.stackdump

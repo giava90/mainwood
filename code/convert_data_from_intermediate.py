@@ -16,6 +16,7 @@ import sys
 import datetime as dt
 from multiprocessing import Pool, Manager
 
+import paths
 from naming import (
     intermediate_filename,
     parse_intermediate_filename,
@@ -197,12 +198,15 @@ if __name__ == "__main__":
     case_studies_to_run = [cs for cs in valid_case_studies if cs != "All"] if case_study == "All" else [case_study]
     scenarios_to_run = [ms for ms in valid_management_scenarios if ms != "ALL"] if management_scenario == "ALL" else [management_scenario]
 
+    local_env = paths.load_local_env()
+
     for cs in case_studies_to_run:
         for ms in scenarios_to_run:
-            #input_folder_path = f"/cluster/work/climate/amauri/{cs}/Results/mgmt_{ms}/dead.trees/"
-            #output_folder_path = f"/cluster/scratch/giacomov/mainwood/{cs}/"
-            input_folder_path = f"../data/{cs}/intermediate/{ms}/"
-            output_folder_path = f"../data/{cs}/"
+            # Same configuration as stage 1 -- see code/paths.py.
+            input_folder_path = paths.intermediate_folder(cs, ms, local_env=local_env)
+            output_folder_path = paths.output_folder(cs, ms, local_env=local_env)
+            print(f"Re-running SorSim from {input_folder_path} into {output_folder_path}")
+            paths.ensure_output_tree(output_folder_path, ms)
             failed = process_combination(
                 cs, ms, 
                 input_folder_path, 
