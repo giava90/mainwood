@@ -22,7 +22,7 @@ empty ``inputs/`` never sits there looking like the run has nowhere to read from
 Stage 1 already creates ``intermediate/`` and ``outputs/`` on demand and stage 2
 creates the summary folder, so nothing here is strictly required -- it exists so
 you can see the layout, and check it is landing on scratch rather than on your
-home quota, before committing hours of walltime to it.
+home quota rather than on scratch, before committing hours of walltime to it.
 """
 
 import os
@@ -102,8 +102,7 @@ def main(argv):
     # Only worth flagging when the two disagree: assortments on scratch but the
     # summaries built from them landing somewhere else. Stage 2 hardcoded
     # ../data/summaries_for_plots/ while taking its input root as an argument, so
-    # that combination used to be the default on Euler -- 12 GB of Surselva
-    # summaries written onto a home quota that cannot hold them.
+    # that combination used to be the default on Euler.
     summaries = paths.summary_dir(local_env)
     region_root = paths.output_folder(case_studies[0], scenarios[0], local_env=local_env)
     if "/scratch/" in region_root and "/scratch/" not in summaries:
@@ -111,9 +110,12 @@ def main(argv):
         print("WARNING: assortments are on scratch but the summaries are not:")
         print(f"           assortments  {region_root}")
         print(f"           summaries    {summaries}")
-        print("         The summaries are the deliverable and reach 12 GB for Surselva,")
-        print("         which will not fit a home quota. Set MAINWOOD_SUMMARY_DIR in")
-        print("         code/local.env.")
+        print("         The summaries are the deliverable. Extrapolating from the measured")
+        print("         table in docs/09-summary-format.md, a Surselva-sized region runs to")
+        print("         about 1.0 GB per scenario as Parquet and 5.5 GB as CSV -- so all")
+        print("         four scenarios are roughly 4 GB, or 22 GB if you asked for CSV.")
+        print("         Home quotas are far smaller than scratch; check yours with lquota.")
+        print("         Set MAINWOOD_SUMMARY_DIR in code/local.env.")
     return 0
 
 

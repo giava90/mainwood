@@ -126,8 +126,14 @@ WARNING: assortments are on scratch but the summaries are not
 
 That combination used to be the default. Stage 2 took its input root as an argument but
 hardcoded `../data/summaries_for_plots/` for the output, so on Euler it read the
-assortments from scratch and wrote 12 GB of Surselva summaries back onto the home quota.
-`MAINWOOD_SUMMARY_DIR` fixes it; `setup_data_tree.py` tells you if you forgot.
+assortments from scratch and wrote the summaries back onto the home quota.
+
+How much that matters depends on the format. Extrapolating from the measured table in
+[09-summary-format.md](09-summary-format.md), a Surselva-sized region (~40 M rows) is
+about **1.0 GB per scenario as Parquet and 5.5 GB as CSV** — so all four scenarios are
+roughly 4 GB of Parquet, or 22 GB of CSV. Home quotas on Euler are far smaller than
+scratch; check yours with `lquota`. `MAINWOOD_SUMMARY_DIR` fixes it, and
+`setup_data_tree.py` tells you if you forgot.
 
 ### 1.3 Provide `stand.details.csv`
 

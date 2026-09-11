@@ -193,8 +193,9 @@ def summary_dir(local_env=None):
     Stage 2 hardcoded ``../data/summaries_for_plots/`` while taking its *input*
     root as an argument, so on Euler it read the assortments from
     ``/cluster/scratch/...`` and then wrote the summaries back inside the
-    repository -- onto the home quota, which is far smaller than scratch, for a
-    file that reaches 12 GB for Surselva.
+    repository -- onto the home quota, which is far smaller than scratch. A
+    Surselva-sized region is about 1.0 GB per scenario as Parquet and 5.5 GB as
+    CSV, extrapolated from the measured table in docs/09-summary-format.md.
 
     Returns:
         str: Folder path, without a trailing separator.
