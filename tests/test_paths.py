@@ -96,3 +96,33 @@ def test_ensure_output_tree_creates_both_folders(tmp_path):
 
     # idempotent: a re-run over an existing tree must not raise
     paths.ensure_output_tree(root, "WOOD")
+
+
+def test_sample_size_defaults_to_fifty(no_env):
+    """The literal that used to sit inside process_files."""
+    assert paths.sample_size() == 50
+
+
+def test_sample_size_is_configurable(no_env, monkeypatch):
+    """The Euler checkout had this edited to 100 in the source, blocking pulls."""
+    monkeypatch.setenv("MAINWOOD_SAMPLE_SIZE", "100")
+    assert paths.sample_size() == 100
+
+
+@pytest.mark.parametrize("bad", ["nope", "0", "-5", "", "12.5"])
+def test_sample_size_rejects_non_positive_integers(no_env, monkeypatch, bad):
+    monkeypatch.setenv("MAINWOOD_SAMPLE_SIZE", bad)
+    if bad == "":
+        assert paths.sample_size() == 50   # empty means "unset", fall through to default
+    else:
+        with pytest.raises(ValueError, match="positive integer"):
+            paths.sample_size()
+
+
+def test_local_env_skips_keys_the_shell_cannot_assign(no_env):
+    """load_env.sh skips these, so the Python reader must too."""
+    env_file = no_env / "local.env"
+    env_file.write_text("BAD-KEY=x\nGOOD_KEY=y\n2ND=z\n", encoding="utf-8")
+    parsed = paths.load_local_env(str(env_file))
+    assert "BAD-KEY" not in parsed
+    assert parsed["GOOD_KEY"] == "y"

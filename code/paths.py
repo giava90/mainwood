@@ -37,6 +37,7 @@ DEFAULTS = {
     "MAINWOOD_INTERMEDIATE_TEMPLATE": "../data/{case_study}/intermediate/{scenario}/",
     "MAINWOOD_OUTPUT_TEMPLATE": "../data/{case_study}/",
     "MAINWOOD_DATA_ROOT": "../data",
+    "MAINWOOD_SAMPLE_SIZE": "50",
 }
 
 #: Placeholders a template may contain.
@@ -154,6 +155,28 @@ def output_folder(case_study, scenario, cohort="dead", local_env=None):
 def data_root(local_env=None):
     """Stage 2's ``folder_data``: the root holding ``<region>/outputs/<scenario>/``."""
     return setting("MAINWOOD_DATA_ROOT", local_env)
+
+
+def sample_size(local_env=None):
+    """How many files ``use_sample=True`` processes.
+
+    Was a literal 50 inside ``process_files``; the Euler checkout had it edited to
+    100, which is the kind of change that then blocks a ``git pull``.
+
+    Returns:
+        int: A positive file count.
+
+    Raises:
+        ValueError: If the configured value is not a positive integer.
+    """
+    raw = setting("MAINWOOD_SAMPLE_SIZE", local_env)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"MAINWOOD_SAMPLE_SIZE must be a positive integer, got {raw!r}.")
+    if value <= 0:
+        raise ValueError(f"MAINWOOD_SAMPLE_SIZE must be a positive integer, got {value}.")
+    return value
 
 
 def ensure_output_tree(output_folder_path, scenario):

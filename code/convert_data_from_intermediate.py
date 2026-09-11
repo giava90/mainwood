@@ -86,8 +86,7 @@ def process_files(files, input_folder_path, output_folder_path, case_study, mana
         failed = manager.list()
 
         if sample == "True":
-            sample_size = min(len(files), 50)
-            files = files[:sample_size]
+            files = files[: min(len(files), paths.sample_size())]
         
         # Step 2: Run SorSim in Parallel
         with Pool(processes=num_cores) as pool:

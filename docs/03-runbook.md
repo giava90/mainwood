@@ -240,6 +240,27 @@ scenario rather than `ALL`. See [07-performance.md](07-performance.md).
 **Sampling.** `sample_size` was a workaround for the old read path. 2 GB of SorSim output
 now summarises in about 12 seconds, so prefer `False` (all files) over `100`.
 
+## 3.5 Several jobs at once, against different input folders
+
+To split stage 1 across more SLURM jobs, or to read one run from a different ForClim
+location, override the template for that submission only. The environment beats
+`local.env`, so nothing else changes and no file is edited:
+
+```bash
+MAINWOOD_INPUT_TEMPLATE='/cluster/scratch/giacomov/mainwood/{case_study}/inputs/WOOD/{cohort}.trees/'   ./run_conversion.sh WOOD Surselva
+
+MAINWOOD_INPUT_TEMPLATE='/cluster/work/climate/amauri/{case_study}/Results/mgmt_{scenario}/{cohort}.trees/'   ./run_conversion.sh WOOD Entlebuch
+```
+
+Both run concurrently and write to their own `outputs/<scenario>/`.
+
+> This replaces `convert_data_plantations.py` on the Euler checkout — a copy of the
+> whole converter that differed from it only in two path lines. Because it was forked
+> from a 2025 base it never received the `.csv` suffix fix, so any uncompressed input
+> would have produced an empty output folder silently, and it hardcoded
+> `inputs/WOOD/` while still accepting a `scenario` argument, so a non-WOOD run read
+> WOOD inputs and wrote them into the other scenario's output folder. Delete it.
+
 ## 4. Re-running SorSim without re-converting
 
 Only if the tree lists are still in `intermediate/` (i.e. `save_intermediate=True`, or
