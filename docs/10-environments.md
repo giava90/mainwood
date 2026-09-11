@@ -56,24 +56,55 @@ numpy-2-compatible and behaviourally close to the 2.0.3 that was there.
 | scikit-learn | 1.3.0 ✗ | 1.9.1 ✓ |
 | numexpr / bottleneck | numpy-1 builds (warned loudly) | 2.14.2 / 1.6.0 ✓ |
 | numba / shapely / geopandas | ✗ | 0.67.0 / 2.1.2 / 1.1.4 ✓ |
+| statsmodels | 0.14.0 ✗ (see darts below) | 0.15.0 ✓ |
+| xarray | 2023.6.0 | 2026.7.0 ✓ |
+| darts | 0.31.0 ✗ | 0.47.0 ✓ |
 
 matplotlib renders, pandas computes, and the import is silent. The full test suite of
 this repository passes in `base` (111 tests).
 
-### Still broken in `base`, and why
+### darts in `base` (2026-09-11)
 
-`darts 0.31.0` declares `numpy<2.0.0`. That is the package's own constraint, not an ABI
-problem — the answer is a newer darts, not an older numpy. It now has its own environment
-(below). If you would rather have it in `base` as well,
-`pip install -c pin.txt "u8darts>=0.47"` should do it, but a forecasting stack is exactly
-the kind of thing worth keeping out of `base`.
+`darts 0.31.0` declared `numpy<2.0.0`. That was the package's own constraint, not an ABI
+problem, and the answer was a newer darts rather than an older numpy:
+
+```bash
+printf 'numpy==2.4.6
+pandas<3
+' > pin_darts.txt
+python -m pip install --upgrade -c pin_darts.txt "darts>=0.47"
+python -m pip install --upgrade -c pin_darts.txt statsmodels xarray
+```
+
+darts 0.47.0 installed **without moving anything else** — numpy stayed 2.4.6 and pandas
+stayed 2.3.3 (the `darts` conda env happens to run on pandas 3, but darts does not require
+it).
+
+The first run then failed inside `statsmodels`, which was still the numpy-1 build 0.14.0.
+This is worth remembering: the earlier repair pass had marked statsmodels "OK" because a
+plain `import statsmodels` never touches its compiled state-space extensions. **Import the
+submodule that does the work, not the package.** `statsmodels` 0.15.0 and `xarray`
+2026.7.0 fixed it.
+
+Verified afterwards across all three darts model families:
+
+| | |
+|---|---|
+| statistical | NaiveSeasonal, ExponentialSmoothing, ARIMA, Theta |
+| sklearn-based | LinearRegressionModel |
+| torch / lightning | RNNModel (2 epochs, cpu) |
+
+A deeper sweep that imports 31 *compiled submodules* (`pandas._libs.interval`,
+`matplotlib._path`, `scipy.linalg`, `statsmodels.tsa.statespace.tools`, `torch._C`, …)
+now reports zero numpy-1 modules left in `base`.
 
 If you truly want a source build of matplotlib against your numpy, that needs MSVC Build
 Tools plus freetype/qhull; the wheel route above achieves the same ABI result.
 
 ## The `darts` environment
 
-Created 2026-09-11, so darts has somewhere to live that is not `base`:
+Created 2026-09-11. darts is now in `base` as well (above); this env keeps a clean,
+isolated copy:
 
 ```bash
 conda create -n darts -c conda-forge python=3.11 u8darts
@@ -144,7 +175,7 @@ About 2.5 GB freed. R 4.6.1, RStudio and the `arrow` library are unaffected.
 |---|---|
 | the pipeline, the tests | `base` (now healthy) or the Euler module stack |
 | reading summaries in R | `...\R-4.6.1\bin\x64\Rscript.exe`, or RStudio |
-| darts / forecasting | `conda activate darts` |
+| darts / forecasting | `base`, or `conda activate darts` for an isolated copy |
 
 The repository's dependencies are in `requirements.txt`; the R side needs only `arrow`
 (or `nanoparquet`), plus `readr`/`dplyr` for the convenience paths.
