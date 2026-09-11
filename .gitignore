@@ -22,6 +22,14 @@ data/summaries_for_plots/
 # They are small, they change every volume in the summary, and they are the one
 # thing a fresh clone cannot rebuild. Commit them normally, no -f needed.
 
+# Raw ForClim deliveries exactly as received. Large (9 MB), and the file the
+# pipeline actually reads is the derived data/<Region>/stand.details.csv, which is
+# tracked. Provenance is not lost: code/import_stand_details.py prints the source
+# path and md5, and those go in the commit message that imports a delivery.
+data/manag4giacomo/
+data/manag4giacomo.zip
+data/*/manag_areas_*.csv
+
 # --- per-machine -----------------------------------------------------------
 # Paths and sbatch defaults. Template is code/local.env.example. Keeping this
 # untracked is what makes `git pull` on Euler conflict-free.

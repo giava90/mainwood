@@ -123,14 +123,28 @@ scales every number in the output — so it is versioned and travels with the co
 > the reason a plain `git add` warned and got skipped. `.gitignore` now ignores only the
 > regenerable sub-folders, so these files commit normally.
 
-**When a new delivery arrives:**
+**When a new delivery arrives** use `import_stand_details.py` rather than copying by
+hand. The deliveries are not uniform: the file is `manag_areas_all.csv`,
+`manag_areas_all7.csv` or `manag_areas_all12.csv` depending on the region, the region
+folder is lower-case, the column sets differ entirely, and **Jurapark spells the area
+column `Area_ha`** while every other region writes `area_ha`. The importer normalises the
+case, checks `fsID` is present and unique, and prints the provenance to paste into the
+commit message.
 
 ```bash
-cp <new file> ../data/<Region>/stand.details.csv
-python preflight.py <Region> WOOD dead      # check the columns and the area total
-git add ../data/<Region>/stand.details.csv  # no -f needed any more
-git commit -m "stand.details.csv for <Region>, delivery of <date>"
+# look at it first -- --check writes nothing
+python import_stand_details.py <Region> ../data/manag4giacomo/manag4giacomo/<region>/<file>.csv --check
+
+# then write and commit
+python import_stand_details.py <Region> ../data/manag4giacomo/manag4giacomo/<region>/<file>.csv
+python preflight.py <Region> WOOD dead
+git add ../data/<Region>/stand.details.csv   # no -f needed any more
+git commit -m "stand.details.csv for <Region>, delivery <md5>"
 ```
+
+**`--check` first, always.** The Surselva copy is a curated 14-column subset of a
+23-column delivery plus an `elev` column from elsewhere; every shared value matches, but
+a blind re-import would discard that curation.
 
 Required columns:
 
