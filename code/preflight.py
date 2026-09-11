@@ -20,14 +20,27 @@ Exit status is 0 if the run can proceed, 1 if anything would fail. Use it as a
 gate in a submit script: ``python preflight.py ... && ./run_conversion.sh ...``
 """
 
+import datetime as dt
 import os
 import sys
 
+import exclusions
 import paths
 import regions
 from naming import COHORTS, parse_forclim_filename
 
 OK, WARN, FAIL = "ok  ", "warn", "FAIL"
+
+
+def preview_report_path(output_folder_path, case_study, scenario, cohort):
+    """Where preflight writes its exclusion preview.
+
+    Deliberately a different name from the one stage 1 writes: this is what
+    *would* be excluded, produced without running anything, and it must not be
+    mistaken for the record of a run that actually happened.
+    """
+    name = f"preflight_excluded_{case_study}_{scenario}_{cohort}.csv"
+    return os.path.join(output_folder_path, name)
 
 
 def check_input_folder(folder, case_study, cohort):
@@ -55,13 +68,28 @@ def check_input_folder(folder, case_study, cohort):
     return OK, f"{len(matching)} input files in {folder}"
 
 
-def check_stand_details(case_study, folder, cohort, sample_limit=2000):
+def check_stand_details(case_study, folder, cohort, scenario=None,
+                       output_folder_path=None, sample_limit=None):
     """Confirm ``stand.details.csv`` exists and covers the stands on disk.
 
-    A stand present in the file names but absent from ``stand.details.csv`` is
-    the silent ``NaN`` failure: stage 2 warns once and carries on. All findings
-    are collected rather than returned at the first one, so a warning about
-    zero-area stands never hides a genuine join failure underneath it.
+    Stands the join cannot find are **not** a blocking problem any more: stage 1
+    excludes them before SorSim runs and reports them. So this reports how many
+    would be excluded, writes the full list to a file -- the printed message
+    names only a handful, and the list is what goes back to the ForClim side --
+    and leaves the decision to submit to you.
+
+    All findings are collected rather than returned at the first one, so a
+    warning about zero-area stands never hides a join failure underneath it.
+
+    Args:
+        case_study (str): Region.
+        folder (str): Input folder holding the ForClim files.
+        cohort (str): ``dead`` or ``alive``.
+        scenario (str | None): Needed to name the report.
+        output_folder_path (str | None): Where the report goes. No report without it.
+        sample_limit (int | None): Stop after this many distinct stands. ``None``
+            reads them all -- the default, because a partial scan reports a
+            partial exclusion list, which is worse than being slow.
 
     Returns:
         list[tuple[str, str]]: One ``(status, message)`` per finding.
@@ -103,9 +131,12 @@ def check_stand_details(case_study, folder, cohort, sample_limit=2000):
 
     known = set(stands["fsID"].astype(str))
     seen, unknown = set(), set()
+    file_counts, examples = {}, {}
     for entry in os.scandir(folder):
-        if not entry.is_file() or len(seen) >= sample_limit:
+        if not entry.is_file():
             continue
+        if sample_limit is not None and len(seen) >= sample_limit:
+            break
         parsed = parse_forclim_filename(entry.name, case_study, cohort)
         if parsed is None:
             continue
@@ -113,12 +144,37 @@ def check_stand_details(case_study, folder, cohort, sample_limit=2000):
         seen.add(stand)
         if stand not in known:
             unknown.add(stand)
+            file_counts[stand] = file_counts.get(stand, 0) + 1
+            examples.setdefault(stand, entry.name)
 
     if unknown:
-        findings.append((FAIL, (
-            f"{len(unknown)} stand(s) in the input file names are absent from "
-            f"stand.details.csv (e.g. {', '.join(sorted(unknown)[:5])}) -- these "
-            f"would give NaN volumes"
+        shown = ", ".join(sorted(unknown, key=exclusions._sortable)[:5])
+        message = (
+            f"{len(unknown)} of {len(seen)} stand(s) on disk are absent from "
+            f"stand.details.csv (e.g. {shown}) -- stage 1 will exclude them"
+        )
+        written = None
+        if scenario and output_folder_path:
+            checked_at = dt.datetime.now().isoformat(timespec="seconds")
+            rows = [{
+                "stand": stand,
+                "reason": exclusions.NOT_IN_STAND_DETAILS,
+                "area_ha": "",
+                "n_files": file_counts.get(stand, 0),
+                "example_file": examples.get(stand, ""),
+                "case_study": case_study,
+                "scenario": scenario,
+                "cohort": cohort,
+                "checked_at": checked_at,
+            } for stand in sorted(unknown, key=exclusions._sortable)]
+            written = exclusions.write_report(
+                preview_report_path(output_folder_path, case_study, scenario, cohort), rows
+            )
+        if written:
+            message += f"; full list in {written}"
+        findings.append((WARN, message))
+        findings.append((OK, (
+            f"{len(stands)} stands listed, {stands['area_ha'].sum():,.1f} ha total"
         )))
     else:
         # The area total is the number every volume in the summary is scaled by, so
@@ -229,7 +285,7 @@ def main(argv):
             folder = paths.input_folder(cs, ms, cohort, local_env)
             out = paths.output_folder(cs, ms, cohort, local_env)
             results = [check_input_folder(folder, cs, cohort)]
-            results += check_stand_details(cs, folder, cohort)
+            results += check_stand_details(cs, folder, cohort, ms, out)
             results.append(check_output_tree(out, ms))
             for status, message in results:
                 print(f"[{status}] {message}")

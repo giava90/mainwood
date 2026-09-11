@@ -308,6 +308,23 @@ corrected data arrives — delete nothing, just re-run stage 1 for the region an
 report shrinks. If **nothing** is excluded the file is removed rather than left
 behind, so a stale report is never mistaken for a current one.
 
+### Seeing the list before you submit
+
+`preflight.py` reports the same exclusions without running anything, and writes the full
+list (the printed message names only five) to the region root:
+
+```
+preflight_excluded_<Region>_<scenario>_<cohort>.csv
+```
+
+It is deliberately a different name from the report stage 1 writes: this is what *would*
+be excluded, not the record of a run that happened.
+
+Stands absent from `stand.details.csv` are a **warning**, not a blocker — stage 1
+excludes them and carries on, so refusing the run would be refusing one that succeeds.
+What still blocks: a missing or unreadable `stand.details.csv`, a missing input folder,
+input files that match no stand, and absent Python packages.
+
 The job log carries the same thing in short form:
 
 ```
