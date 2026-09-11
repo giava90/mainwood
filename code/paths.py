@@ -173,11 +173,14 @@ def stand_details_path(case_study, local_env=None):
     while ``preflight`` looked under ``MAINWOOD_DATA_ROOT``, which on Euler is
     ``/cluster/scratch/...`` -- a different file, or none. Both now come here.
 
-    The repository copies are copies of a ForClim delivery folder, and the Vaud one
-    had gone stale without anyone noticing (it predated the ``area_ha`` column).
-    Point this at the delivery folder to stop copying altogether:
+    The file arrives from the ForClim side as a one-off delivery (``manag4giacomo``)
+    which they do not host, so the tracked copy under ``data/<region>/`` is the
+    canonical one -- small, not regenerable, and versioned because it scales every
+    number in the output. That is the default and normally stays.
 
-        MAINWOOD_STAND_DETAILS='/cluster/work/.../manag4giacomo/{case_study}/stand.details.csv'
+    Override it only to point at a delivery that has not been committed yet::
+
+        MAINWOOD_STAND_DETAILS='/cluster/scratch/giacomov/incoming/{case_study}/stand.details.csv'
     """
     template = setting("MAINWOOD_STAND_DETAILS", local_env)
     return expand(template, case_study, scenario="", cohort="", trailing_slash=False)

@@ -113,19 +113,23 @@ is kept only for the `inputs/` side of a laptop copy.)
 This file is the join key and the area column behind **every volume in the summary**,
 so it is the one input worth checking before a long run.
 
-The files under `data/<region>/stand.details.csv` are *copies* of a ForClim delivery
-folder (`manag4giacomo`). A copy goes stale silently — the committed Vaud one predated
-the `area_ha` column entirely, so it had no area to rescale by at all, and nothing in
-the pipeline said so. Prefer reading the delivery directly:
+It arrives from the ForClim side as a one-off delivery (`manag4giacomo`) and is **not**
+hosted on their cluster folder, so we host it. The canonical copy is the one tracked in
+this repository at `data/<Region>/stand.details.csv`: small, not regenerable, and it
+scales every number in the output — so it is versioned and travels with the code.
+
+> The Vaud copy sat uncommitted for months while the repository carried an older
+> delivery that had no `area_ha` column at all. `data/` being git-ignored wholesale was
+> the reason a plain `git add` warned and got skipped. `.gitignore` now ignores only the
+> regenerable sub-folders, so these files commit normally.
+
+**When a new delivery arrives:**
 
 ```bash
-ls /cluster/work/climate/amauri/manag4giacomo/      # check the real layout first
-```
-
-then in `code/local.env`:
-
-```bash
-MAINWOOD_STAND_DETAILS='/cluster/work/climate/amauri/manag4giacomo/{case_study}/stand.details.csv'
+cp <new file> ../data/<Region>/stand.details.csv
+python preflight.py <Region> WOOD dead      # check the columns and the area total
+git add ../data/<Region>/stand.details.csv  # no -f needed any more
+git commit -m "stand.details.csv for <Region>, delivery of <date>"
 ```
 
 Required columns:
@@ -136,16 +140,16 @@ Required columns:
 | `area_ha` | **yes** | rescaling patch volumes to the real stand area |
 | `Above1000m` | no | the altitude split (only if you want those figures) |
 
-Check it with preflight rather than by eye — it verifies the columns, flags missing or
-zero areas, confirms every stand on disk joins, and prints the area total:
+Preflight verifies the columns, flags missing or zero areas, confirms every stand on disk
+joins, and prints the area total:
 
-```bash
-python preflight.py <Region> WOOD dead
-# [ok  ] 2687 stands listed, 15,105.0 ha total, all 1 stands on disk join
+```
+[ok  ] 2687 stands listed, 15,105.0 ha total, all 1 stands on disk join
 ```
 
 That total is what every volume gets scaled by. Check it against the figure the ForClim
-side quotes; if it disagrees, you have the wrong delivery.
+side quotes; if it disagrees, you have the wrong delivery. `MAINWOOD_STAND_DETAILS`
+exists to point at a delivery elsewhere for testing, before you commit it.
 
 ### 1.4 Point at the ForClim results
 

@@ -1,15 +1,31 @@
 figures/
-data/
 __pycache__/
 *.pyc
 .pytest_cache/
 output.png
+*.stackdump
 
-# Per-machine configuration: paths and sbatch defaults. Template is
-# code/local.env.example. Keeping this untracked is what makes `git pull`
-# on Euler conflict-free.
+# --- data/ -----------------------------------------------------------------
+# Simulation data is regenerable and large, so it is ignored per-folder rather
+# than by ignoring `data/` wholesale. That distinction matters: with `data/`
+# ignored, `git add data/<region>/stand.details.csv` warns and a chained command
+# can silently skip the commit -- which is how the Vaud stand.details.csv came to
+# sit uncommitted for months while the repository carried an older delivery that
+# had no area_ha column at all (see docs/06-known-issues.md).
+data/*/inputs/
+data/*/intermediate/
+data/*/outputs/
+data/summaries_for_plots/
+
+# Everything else under data/ is reference data that is NOT regenerable and IS
+# tracked -- the ForClim stand.details.csv deliveries and fraction_quality.xlsx.
+# They are small, they change every volume in the summary, and they are the one
+# thing a fresh clone cannot rebuild. Commit them normally, no -f needed.
+
+# --- per-machine -----------------------------------------------------------
+# Paths and sbatch defaults. Template is code/local.env.example. Keeping this
+# untracked is what makes `git pull` on Euler conflict-free.
 code/local.env
 
 # SLURM job logs written next to the wrappers
 code/slurm-*.out
-*.stackdump
