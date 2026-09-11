@@ -64,6 +64,29 @@ def forclim_pattern(case_study, cohort="dead"):
     )
 
 
+#: The alive cohort is delivered from a different pipeline with a different name:
+#: ``dataSim_4810_scen7.csv`` -- underscores rather than a dot, no cohort token,
+#: and the simtype written as ``scen<n>``. It carries no cohort marker at all, so
+#: the caller's ``cohort`` argument is what decides; the two folders are separate
+#: (``alive.data/``) and stage 1 is invoked per cohort, so nothing is ambiguous.
+SCEN_PATTERN = re.compile(r"^dataSim_(\d+)_scen(\d+)$")
+
+
+def parse_scen_filename(filename):
+    """Extract ``(stand, simtype)`` from the ``dataSim_<stand>_scen<n>`` form.
+
+    Args:
+        filename (str): e.g. ``dataSim_4810_scen7.csv``.
+
+    Returns:
+        tuple[str, str] | None: ``("4810", "7")``, or ``None`` if it is not this form.
+    """
+    match = SCEN_PATTERN.match(strip_data_suffix(filename))
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
+
+
 def parse_forclim_filename(filename, case_study, cohort="dead"):
     """Extract ``(stand, simtype)`` from a ForClim output file name.
 
@@ -82,9 +105,11 @@ def parse_forclim_filename(filename, case_study, cohort="dead"):
         not belong to this cohort/region (caller should skip the file).
     """
     match = forclim_pattern(case_study, cohort).search(strip_data_suffix(filename))
-    if match is None:
-        return None
-    return match.group(1).lstrip("_"), match.group(2)[1:]
+    if match is not None:
+        return match.group(1).lstrip("_"), match.group(2)[1:]
+    # The alive delivery uses dataSim_<stand>_scen<n> instead. Tried second so the
+    # historical form always wins where both could match.
+    return parse_scen_filename(filename)
 
 
 def intermediate_filename(stand, simtype, cohort="dead"):

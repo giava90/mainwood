@@ -53,6 +53,17 @@ def parse_filename(filename: str, scenario: str) -> tuple:
 
     if scenario == "BIO":
         return stand, simtype, "999", False, cohort
+    elif cohort == "alive" and "planted" not in parts:
+        # The 2026 alive delivery has no planting at all: one simulation per
+        # stand, so the name is just sorsim_alive_output<stand>_<simtype>. Without
+        # this branch the "no 'planted' in the name" case below reads it as the
+        # single-species plantation form, setting planted_species to the simtype
+        # and plantation to True for every alive file.
+        #
+        # Guarded on "planted" because an alive file CAN carry a planting suffix
+        # -- the earlier alive support handled sorsim_alive_output240_7_planted_01
+        # -- and that form must keep parsing its species.
+        return stand, simtype, "999", False, cohort
     else:
         planted_species = parts[-1] if "planted" in parts else None # this case is panted
         if planted_species is None:
@@ -233,12 +244,16 @@ def process_file(file_path_and_name):
         return None
 
 
-def preprocess_data(df, management_scenario):
+def preprocess_data(df, management_scenario, cohort="dead"):
     """
     Preprocesses the combined DataFrame by removing unnecessary columns,
     handling missing values, renaming columns with umlauts, and casting volume columns to float.
     Also, if stand_simtype_count is not None, we divide each (stand,simtype) pair by the count observed.
     This division is to normalize per number of simulations per (stand,simtype) pair.
+
+    The alive cohort skips the year floor and the planting weights entirely: it is
+    a single snapshot of the first simulated year with one simulation per stand
+    and no planting, so every weight is 1 and a 2020 floor would empty it.
 
     Args:
         df (pandas.DataFrame): The DataFrame to preprocess.
@@ -286,13 +301,23 @@ def preprocess_data(df, management_scenario):
     summaries.rename(columns={"Gruppierungsmerkmal": "year"}, inplace=True)
     # cast years as int
     summaries["year"] = summaries["year"].astype(int)
-    summaries = summaries[summaries["year"] >=2020 ]
+    # The 2020 floor drops ForClim's spin-up, and applies to the dead cohort only.
+    # The alive delivery is a single snapshot of the first simulated year (2015),
+    # so the same floor would discard every row and write an empty summary.
+    if cohort != "alive":
+        summaries = summaries[summaries["year"] >= 2020]
     
     # we know create a weighting columns to rescale the assortments based on the rules used in ForClim simulations
     if management_scenario == "BIO":
         # eight = 1.0 as there is no planting in BIO
         summaries["weight"] = 1
-    if management_scenario != "BIO":
+    if cohort == "alive":
+        # One simulation per stand and no planting, so every row is its stand's
+        # only observation. The planting arithmetic below would reach weight 1
+        # anyway -- via species_count == 1 -- but only by coincidence, and it
+        # first misreads these files as single-species plantations. Say it plainly.
+        summaries["weight"] = 1
+    if management_scenario != "BIO" and cohort != "alive":
         # add columns called weight with value 0.9 if planting is False, 0.1 otherwise
         summaries["weight"] = np.where(summaries["planting"], 0.1, 0.9)
         # count the number of unique species per (stand, simtype) pair - we could also use the defaultdict
@@ -388,6 +413,10 @@ def augment_with_stand_data(summaries, stand_data):
     # The old check compared int(stand) against the raw values, which matched
     # numerically even when the string index below did not -- so a total join
     # failure reported nothing here and surfaced as NaN areas much later.
+    # astype(str) first: compact_dtypes makes `stand` a Categorical, and mapping
+    # over a Categorical returns a Categorical, which then cannot be multiplied by
+    # the area below. astype(str) was silently doing that job before stand_key
+    # existed.
     known_stands = {stand_key(v) for v in stand_data["fsID"]}
     for stand in summaries["stand"].unique():
         if stand_key(stand) not in known_stands:
@@ -403,12 +432,12 @@ def augment_with_stand_data(summaries, stand_data):
 
     # Adding area and altitude to summaries
     if "Above1000m" in  stand_data.columns:
-        summaries["Above1000m"] = summaries["stand"].map(stand_key).map(stand_to_else_dict["Above1000m"])
+        summaries["Above1000m"] = summaries["stand"].astype(str).map(stand_key).map(stand_to_else_dict["Above1000m"])
     # computing the simulated area
     #summaries["sim_area (m2)"] = summaries["stand"].astype(str).map(stand_to_else_dict["n.patches"]) * 625
     # the simulated area is always 100 patches of 625m2 each
     summaries["sim_area (m2)"] = 100 * 625
-    summaries["area"] = summaries["stand"].map(stand_key).map(stand_to_else_dict["area_ha"])
+    summaries["area"] = summaries["stand"].astype(str).map(stand_key).map(stand_to_else_dict["area_ha"])
     # rescaling the volume according to the actual size of the stand
     # in the simulations, we have 100 patches of 625 m2 each
     # however, the actual area of the stand is different and saved in "area" column
@@ -1303,7 +1332,7 @@ def process_combination(args):
     df = load_data_parallel(folder_path, management, sample, num_cores, cohort=cohort)
 
     print("Preprocessing main data...")
-    summaries = preprocess_data(df, management)
+    summaries = preprocess_data(df, management, cohort)
 
     print("Compacting dtypes...")
     summaries = compact_dtypes(summaries)
@@ -1346,7 +1375,17 @@ def process_combination(args):
                             fmt=summary_format)
     print("Wrote summary table to", written,
           f"({os.path.getsize(written)/1e6:,.0f} MB)")
-    summaries = summaries[summaries["simtype"] == '1']
+    # Figures are drawn for one climate simtype. '1' is RCP 8.5 for the dead
+    # cohort; the alive delivery only ever carries simtype 7, because the climate
+    # does not diverge within its single year -- filtering it to '1' would leave
+    # nothing to plot.
+    if cohort == "alive":
+        present = sorted(summaries["simtype"].astype(str).unique())
+        if len(present) > 1:
+            print(f"Note: alive summaries carry {len(present)} simtypes {present}; "
+                  "the figures use all of them.")
+    else:
+        summaries = summaries[summaries["simtype"] == '1']
     # figures for the alive cohort are tagged so they do not overwrite the dead ones
     fig_tag = "8_5" if cohort == "dead" else f"8_5_{cohort}"
     # by diameter

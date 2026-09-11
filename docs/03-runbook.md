@@ -279,6 +279,50 @@ ls "$root"/intermediate/BAU | wc -l            # should be 0 (unless save_interm
 A non-empty `intermediate/` means the run was interrupted — use step 4 rather than
 redoing the conversion.
 
+## 2.4 The alive cohort comes from somewhere else
+
+The alive data is produced by a different pipeline and does not look like the dead
+cohort in any respect that matters:
+
+| | dead | alive |
+|---|---|---|
+| input tree | `/cluster/work/climate/amauri/<Region>/Results/mgmt_<scenario>/dead.trees/` | `/nfs/.../raw/<Region>/alive.data/<region>/` |
+| file name | `dataSim.dead207_1_planted_06.csv.gz` | `dataSim_4810_scen7.csv` |
+| years | the full simulation, floored at 2020 | **2015 only** — a first-year snapshot |
+| simtypes | several | **7 only** — climate has not diverged yet |
+| planting | several variants per stand | **none**, one file per stand |
+
+Point the input template at it, using `{cohort}` if you want one template for both,
+or overriding per run:
+
+```bash
+MAINWOOD_INPUT_TEMPLATE='/nfs/ites-formdata.ethz.ch/mnt/formdata/wood_valuation/Price/data/raw/{case_study}/alive.data/{case_study_lower}/'   ./run_conversion.sh BAU Misox alive
+```
+
+`{case_study_lower}` exists for this layout — the region appears capitalised once and
+lower-case once in the same path.
+
+**What the pipeline does differently for `alive`,** all automatic:
+
+- the `dataSim_<stand>_scen<n>` name is parsed alongside the historical form;
+- the 2020 year floor is skipped, because it would discard the entire 2015 snapshot;
+- every row is weighted 1 — one simulation per stand, no planting, so the planting
+  arithmetic does not apply;
+- figures are not filtered to `simtype == '1'`, which would leave nothing to plot.
+
+**What preflight checks,** because the weighting depends on it:
+
+```
+[ok  ] 2113 alive files, one per stand
+[ok  ] one simtype (7), as expected
+[ok  ] year is 2015 in the 3 file(s) sampled
+```
+
+A stand appearing in **two** alive files is a blocking failure, not a warning: every
+alive row is weighted 1 on the assumption of one simulation per stand, so a repeat
+would be double-counted rather than merely odd. More than one simtype, or a year
+other than 2015, warns.
+
 ## 2.5 Stands that were excluded
 
 Stage 1 drops stands it cannot compute **before** SorSim runs, so no cluster time

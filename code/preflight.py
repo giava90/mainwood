@@ -241,6 +241,91 @@ def check_summary_dependencies(summary_format="parquet"):
     return findings
 
 
+#: The only year the alive delivery contains -- it is a snapshot of the first
+#: simulated year, not a time series.
+ALIVE_YEAR = 2015
+
+
+def check_alive_inputs(folder, case_study, sample_files=3):
+    """Check the invariants the alive delivery is supposed to hold.
+
+    Stage 2 gives every alive row a weight of 1 because there is exactly one
+    simulation per stand. If that stops being true the weights are silently wrong
+    -- double-counted, not merely odd -- so a repeated stand blocks the run rather
+    than warning.
+
+    Args:
+        folder (str): Input folder holding the alive ForClim files.
+        case_study (str): Region, for the name parser.
+        sample_files (int): How many files to open for the year check.
+
+    Returns:
+        list[tuple[str, str]]: One ``(status, message)`` per finding.
+    """
+    import collections
+
+    import pandas as pd
+
+    if not os.path.isdir(folder):
+        return []                      # check_input_folder already reported this
+
+    findings = []
+    stands, simtypes, names = [], set(), []
+    for entry in os.scandir(folder):
+        if not entry.is_file():
+            continue
+        parsed = parse_forclim_filename(entry.name, case_study, "alive")
+        if parsed is None:
+            continue
+        stands.append(parsed[0])
+        simtypes.add(parsed[1])
+        names.append(entry.name)
+
+    if not stands:
+        return []
+
+    repeated = [s for s, n in collections.Counter(stands).most_common() if n > 1]
+    if repeated:
+        shown = ", ".join(repeated[:5])
+        findings.append((FAIL, (
+            f"{len(repeated)} stand(s) appear in more than one alive file "
+            f"(e.g. {shown}). The alive delivery is meant to hold one simulation "
+            f"per stand, and stage 2 weights every alive row 1 on that basis -- "
+            f"repeated stands would be double-counted."
+        )))
+    else:
+        findings.append((OK, f"{len(stands)} alive files, one per stand"))
+
+    if len(simtypes) > 1:
+        findings.append((WARN, (
+            f"{len(simtypes)} simtypes in the alive inputs ({', '.join(sorted(simtypes))}); "
+            f"only one was expected, because the climate does not diverge within "
+            f"the single simulated year"
+        )))
+    else:
+        findings.append((OK, f"one simtype ({simtypes.pop()}), as expected"))
+
+    years = set()
+    for name in sorted(names)[:sample_files]:
+        try:
+            frame = pd.read_csv(os.path.join(folder, name), usecols=["year"])
+        except (ValueError, OSError) as exc:
+            findings.append((WARN, f"could not read year from {name}: {exc}"))
+            continue
+        years |= set(frame["year"].unique().tolist())
+
+    if years and years != {ALIVE_YEAR}:
+        findings.append((WARN, (
+            f"alive inputs carry year(s) {sorted(years)}; expected only {ALIVE_YEAR}. "
+            f"Stage 2 skips its 2020 floor for the alive cohort, so extra years are "
+            f"kept rather than dropped -- check this is intended."
+        )))
+    elif years:
+        findings.append((OK, f"year is {ALIVE_YEAR} in the {min(sample_files, len(names))} file(s) sampled"))
+
+    return findings
+
+
 def check_java():
     """Stage 1 needs a JVM; on Euler that means the openjdk module is loaded."""
     import shutil
@@ -285,6 +370,8 @@ def main(argv):
             folder = paths.input_folder(cs, ms, cohort, local_env)
             out = paths.output_folder(cs, ms, cohort, local_env)
             results = [check_input_folder(folder, cs, cohort)]
+            if cohort == "alive":
+                results += check_alive_inputs(folder, cs)
             results += check_stand_details(cs, folder, cohort, ms, out)
             results.append(check_output_tree(out, ms))
             for status, message in results:

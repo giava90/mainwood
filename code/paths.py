@@ -42,8 +42,10 @@ DEFAULTS = {
     "MAINWOOD_SAMPLE_SIZE": "50",
 }
 
-#: Placeholders a template may contain.
-PLACEHOLDERS = ("case_study", "scenario", "cohort")
+#: Placeholders a template may contain. ``case_study_lower`` exists because the
+#: alive delivery nests a lower-case region inside a capitalised one:
+#: ``.../raw/Misox/alive.data/misox/``.
+PLACEHOLDERS = ("case_study", "case_study_lower", "scenario", "cohort")
 
 #: A settings key the shell can also assign. Kept in step with code/load_env.sh.
 SETTING_NAME = re.compile(r"^[A-Za-z0-9_]+$")
@@ -132,7 +134,12 @@ def expand(template, case_study, scenario, cohort="dead", trailing_slash=True):
     Raises:
         ValueError: If the template contains a placeholder we do not define.
     """
-    values = {"case_study": case_study, "scenario": scenario, "cohort": cohort}
+    values = {
+        "case_study": case_study,
+        "case_study_lower": str(case_study).lower(),
+        "scenario": scenario,
+        "cohort": cohort,
+    }
     try:
         expanded = template.format(**values)
     except KeyError as exc:
