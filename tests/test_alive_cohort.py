@@ -202,3 +202,49 @@ def test_an_alive_file_with_a_planting_suffix_still_parses_it():
     assert parse_filename("sorsim_alive_output240_7_planted_01.csv", "WOOD") == (
         "240", "7", "01", False, "alive"
     )
+
+
+# ------------------------------------------- per-cohort input templates ----
+
+@pytest.fixture
+def clean_env(monkeypatch, tmp_path):
+    for key in list(paths.DEFAULTS) + [
+        "MAINWOOD_INPUT_TEMPLATE_ALIVE", "MAINWOOD_INPUT_TEMPLATE_DEAD"
+    ]:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(paths, "LOCAL_ENV_PATH", str(tmp_path / "absent.env"))
+    return monkeypatch
+
+
+DEAD_TEMPLATE = "/cluster/work/climate/amauri/{case_study}/Results/mgmt_{scenario}/{cohort}.trees/"
+ALIVE_TEMPLATE = "/nfs/x/raw/{case_study}/alive.data/{case_study_lower}/"
+
+
+def test_the_alive_override_wins_for_alive_only(clean_env):
+    """The cohorts are not in the same tree, so one template with a {cohort}
+    placeholder cannot reach both. Without the override, an alive preflight
+    resolved to .../mgmt_BAU/alive.trees/ and failed as a missing folder."""
+    clean_env.setenv("MAINWOOD_INPUT_TEMPLATE", DEAD_TEMPLATE)
+    clean_env.setenv("MAINWOOD_INPUT_TEMPLATE_ALIVE", ALIVE_TEMPLATE)
+
+    assert paths.input_folder("Entlebuch", "BAU", "dead") == (
+        "/cluster/work/climate/amauri/Entlebuch/Results/mgmt_BAU/dead.trees/"
+    )
+    assert paths.input_folder("Entlebuch", "BAU", "alive") == (
+        "/nfs/x/raw/Entlebuch/alive.data/entlebuch/"
+    )
+
+
+def test_without_an_override_both_cohorts_share_the_template(clean_env):
+    """Unchanged behaviour for a machine that declares only the shared one."""
+    clean_env.setenv("MAINWOOD_INPUT_TEMPLATE", DEAD_TEMPLATE)
+    assert paths.input_folder("Entlebuch", "BAU", "alive") == (
+        "/cluster/work/climate/amauri/Entlebuch/Results/mgmt_BAU/alive.trees/"
+    )
+
+
+def test_an_empty_override_is_ignored(clean_env):
+    """An uncommented-but-blank line in local.env must not blank the template."""
+    clean_env.setenv("MAINWOOD_INPUT_TEMPLATE", DEAD_TEMPLATE)
+    clean_env.setenv("MAINWOOD_INPUT_TEMPLATE_ALIVE", "")
+    assert "mgmt_BAU" in paths.input_folder("Entlebuch", "BAU", "alive")

@@ -287,17 +287,25 @@ cohort in any respect that matters:
 | | dead | alive |
 |---|---|---|
 | input tree | `/cluster/work/climate/amauri/<Region>/Results/mgmt_<scenario>/dead.trees/` | `/nfs/.../raw/<Region>/alive.data/<region>/` |
+| scenario in the path | yes | **no** — see below |
 | file name | `dataSim.dead207_1_planted_06.csv.gz` | `dataSim_4810_scen7.csv` |
 | years | the full simulation, floored at 2020 | **2015 only** — a first-year snapshot |
 | simtypes | several | **7 only** — climate has not diverged yet |
 | planting | several variants per stand | **none**, one file per stand |
 
-Point the input template at it, using `{cohort}` if you want one template for both,
-or overriding per run:
+The two cohorts are on **different filesystems**, so a single template with a
+`{cohort}` placeholder cannot reach both — pointed at the dead tree it resolves an
+alive run to a non-existent `.../mgmt_BAU/alive.trees/`. Set the cohort-specific
+template in `code/local.env` instead; it wins for alive runs only, and the shared
+template keeps serving the dead cohort:
 
 ```bash
-MAINWOOD_INPUT_TEMPLATE='/nfs/ites-formdata.ethz.ch/mnt/formdata/wood_valuation/Price/data/raw/{case_study}/alive.data/{case_study_lower}/'   ./run_conversion.sh BAU Misox alive
+MAINWOOD_INPUT_TEMPLATE='/cluster/work/climate/amauri/{case_study}/Results/mgmt_{scenario}/{cohort}.trees/'
+MAINWOOD_INPUT_TEMPLATE_ALIVE='/nfs/ites-formdata.ethz.ch/mnt/formdata/wood_valuation/Price/data/raw/{case_study}/alive.data/{case_study_lower}/'
 ```
+
+With both set, `./run_conversion.sh BAU Misox alive` and `preflight.py Misox BAU alive`
+resolve the right folder with no per-run override.
 
 `{case_study_lower}` exists for this layout — the region appears capitalised once and
 lower-case once in the same path.
@@ -317,6 +325,12 @@ lower-case once in the same path.
 [ok  ] one simtype (7), as expected
 [ok  ] year is 2015 in the 3 file(s) sampled
 ```
+
+**The alive path carries no scenario.** It is a snapshot of 2015, before management
+diverges — which is also why there is only simtype 7 and no planting. If that is right,
+the alive result is identical for BAU, WOOD, BIO and HYBRID, and running all four
+produces four copies of the same numbers. Confirm with the ForClim side before queueing
+more than one.
 
 A stand appearing in **two** alive files is a blocking failure, not a warning: every
 alive row is weighted 1 on the assumption of one simulation per stand, so a repeat

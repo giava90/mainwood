@@ -112,6 +112,41 @@ def setting(name, local_env=None):
     return DEFAULTS[name]
 
 
+def optional_setting(name, local_env=None):
+    """Resolve a setting that has no default, returning ``None`` when unset.
+
+    :func:`setting` is deliberately strict about unknown names; this is for the
+    per-cohort overrides, which exist only when a machine declares them.
+    """
+    if os.environ.get(name):
+        return os.environ[name]
+    if local_env is None:
+        local_env = load_local_env()
+    return local_env.get(name) or None
+
+
+def input_template(cohort="dead", local_env=None):
+    """The input template for one cohort.
+
+    ``MAINWOOD_INPUT_TEMPLATE_ALIVE`` (or ``_DEAD``) wins over the shared
+    ``MAINWOOD_INPUT_TEMPLATE`` when it is set. The two cohorts are not always in
+    the same tree: the dead cohort is under the ForClim results folder while the
+    alive delivery lives on a different filesystem entirely, so a single template
+    with a ``{cohort}`` placeholder cannot reach both.
+
+    Args:
+        cohort (str): ``dead`` or ``alive``.
+        local_env (dict | None): Pre-parsed ``local.env``.
+
+    Returns:
+        str: The template to expand.
+    """
+    specific = optional_setting(f"MAINWOOD_INPUT_TEMPLATE_{str(cohort).upper()}", local_env)
+    if specific:
+        return specific
+    return setting("MAINWOOD_INPUT_TEMPLATE", local_env)
+
+
 def expand(template, case_study, scenario, cohort="dead", trailing_slash=True):
     """Fill a path template, failing loudly on an unknown placeholder.
 
@@ -154,7 +189,7 @@ def expand(template, case_study, scenario, cohort="dead", trailing_slash=True):
 
 def input_folder(case_study, scenario, cohort="dead", local_env=None):
     """Folder holding the ForClim output for one (region, scenario, cohort)."""
-    return expand(setting("MAINWOOD_INPUT_TEMPLATE", local_env), case_study, scenario, cohort)
+    return expand(input_template(cohort, local_env), case_study, scenario, cohort)
 
 
 def intermediate_folder(case_study, scenario, cohort="dead", local_env=None):

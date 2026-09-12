@@ -37,7 +37,7 @@ module load stack/2024-06 python/3.12.8
 module load stack/2024-06 openjdk/21.0.3_9   # stage 1 only
 
 git pull
-python -m pytest ../                              # 213 tests, ~13 s
+python -m pytest ../                              # 216 tests, ~13 s
 python preflight.py Jurapark WOOD dead            # exits 1 if the run would fail
 ./run_conversion.sh WOOD Jurapark dead            # stage 1  → assortments
 ./run_analysis.sh  Jurapark WOOD dead             # stage 2  → summaries + figures
@@ -65,6 +65,7 @@ file, so a one-off run can override any of these without editing it. Templates e
 | variable | what it names |
 |---|---|
 | `MAINWOOD_INPUT_TEMPLATE` | where stage 1 reads ForClim output |
+| `MAINWOOD_INPUT_TEMPLATE_ALIVE` / `_DEAD` | per-cohort override — the cohorts are on different filesystems |
 | `MAINWOOD_INTERMEDIATE_TEMPLATE` | where saved SorSim tree lists are read back |
 | `MAINWOOD_OUTPUT_TEMPLATE` | region root holding `intermediate/` and `outputs/` |
 | `MAINWOOD_DATA_ROOT` | stage 2's `folder_data` default |
@@ -115,7 +116,7 @@ code/                       the pipeline
 minimal/     the ForClim→SorSim converter and the vendored SorSim jar + Java sources
 data/        reference data, tracked; simulation data, ignored (see the inventory)
 figures/     generated PNGs — git-ignored, reproducible via code/plot_only.py
-tests/       213 pytest tests, pure Python, ~13 s
+tests/       216 pytest tests, pure Python, ~13 s
 docs/        the documents below
 ```
 
