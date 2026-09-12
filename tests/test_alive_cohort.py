@@ -248,3 +248,27 @@ def test_an_empty_override_is_ignored(clean_env):
     clean_env.setenv("MAINWOOD_INPUT_TEMPLATE", DEAD_TEMPLATE)
     clean_env.setenv("MAINWOOD_INPUT_TEMPLATE_ALIVE", "")
     assert "mgmt_BAU" in paths.input_folder("Entlebuch", "BAU", "alive")
+
+
+def test_a_scenario_independent_input_is_checked_once(tmp_path, monkeypatch, capsys):
+    """The alive path carries no scenario, so ALL would check one folder four
+    times, repeating identical findings and re-reading the directory each time."""
+    import preflight
+
+    details = tmp_path / "stand.details.csv"
+    pd.DataFrame({"fsID": [1000], "area_ha": [1.0]}).to_csv(details, index=False)
+    monkeypatch.setenv("MAINWOOD_STAND_DETAILS", str(details))
+
+    folder = tmp_path / "in"
+    folder.mkdir()
+    (folder / "dataSim_1000_scen7.csv").write_text("year\n2015\n", encoding="utf-8")
+
+    monkeypatch.setenv("MAINWOOD_INPUT_TEMPLATE_ALIVE", str(folder).replace("\\", "/") + "/")
+    monkeypatch.setenv("MAINWOOD_OUTPUT_TEMPLATE", str(tmp_path / "out").replace("\\", "/") + "/")
+
+    preflight.main(["preflight.py", "Misox", "ALL", "alive"])
+    out = capsys.readouterr().out
+
+    assert out.count("alive files, one per stand") == 1      # not once per scenario
+    assert out.count("already checked for") == 3             # the other three say so
+    assert "would produce identical output" in out

@@ -326,11 +326,22 @@ lower-case once in the same path.
 [ok  ] year is 2015 in the 3 file(s) sampled
 ```
 
-**The alive path carries no scenario.** It is a snapshot of 2015, before management
-diverges — which is also why there is only simtype 7 and no planting. If that is right,
-the alive result is identical for BAU, WOOD, BIO and HYBRID, and running all four
-produces four copies of the same numbers. Confirm with the ForClim side before queueing
-more than one.
+**The alive path carries no scenario** — confirmed with the ForClim side. It is a
+snapshot of 2015, before management diverges, which is also why there is only simtype 7
+and no planting. The alive result is therefore identical for BAU, WOOD, BIO and HYBRID:
+**run one scenario, not four.**
+
+Preflight knows this. Given `ALL` it inspects each distinct input folder once and says
+which scenario already covered the rest:
+
+```
+--- Misox / WOOD / alive ---
+[ok  ] input folder is the one already checked for BAU: it carries no scenario, so this
+       run would repeat that one exactly
+
+Note: all 4 scenarios read the same input folder, so they
+      would produce identical output. Run one of them.
+```
 
 A stand appearing in **two** alive files is a blocking failure, not a warning: every
 alive row is weighted 1 on the assumption of one simulation per stand, so a repeat

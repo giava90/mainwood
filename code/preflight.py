@@ -365,18 +365,40 @@ def main(argv):
         failures += status == FAIL
 
     for cs in case_studies:
+        # The alive input path carries no scenario -- it is the 2015 snapshot taken
+        # before management diverges. Checking the same folder once per scenario
+        # repeats identical findings and re-reads the whole directory, so inspect
+        # each distinct folder once and say which scenario already covered it.
+        checked_inputs = {}
+
         for ms in scenarios:
             print(f"\n--- {cs} / {ms} / {cohort} ---")
             folder = paths.input_folder(cs, ms, cohort, local_env)
             out = paths.output_folder(cs, ms, cohort, local_env)
-            results = [check_input_folder(folder, cs, cohort)]
-            if cohort == "alive":
-                results += check_alive_inputs(folder, cs)
-            results += check_stand_details(cs, folder, cohort, ms, out)
+
+            results = []
+            if folder in checked_inputs:
+                results.append((OK, (
+                    "input folder is the one already checked for "
+                    f"{checked_inputs[folder]}: it carries no scenario, so this "
+                    "run would repeat that one exactly"
+                )))
+            else:
+                checked_inputs[folder] = ms
+                results.append(check_input_folder(folder, cs, cohort))
+                if cohort == "alive":
+                    results += check_alive_inputs(folder, cs)
+                results += check_stand_details(cs, folder, cohort, ms, out)
+
             results.append(check_output_tree(out, ms))
             for status, message in results:
                 print(f"[{status}] {message}")
                 failures += status == FAIL
+
+        if len(scenarios) > 1 and len(checked_inputs) == 1:
+            print()
+            print(f"Note: all {len(scenarios)} scenarios read the same input folder, so they")
+            print("      would produce identical output. Run one of them.")
 
     print()
     if failures:
