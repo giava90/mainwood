@@ -141,3 +141,70 @@ def test_count_outputs_reports_what_actually_arrived(tmp_path):
         (folder / f"sorsim_output{n}_1_planted_00.csv").write_text("x", encoding="utf-8")
 
     assert scaling_run.count_outputs(root, "Jurapark", "BAU") == 3
+
+
+# ------------------------------------------------------- phase timing ----
+
+def test_the_phase_split_is_parsed_from_stage_ones_output():
+    """A single elapsed figure hid that phase 2 dominates and grows with volume,
+    which is how a 200-file benchmark under-predicted a 60,870-file run."""
+    stdout = (
+        "Looking for files in folder path ...\n"
+        "Phase 1 (ForClim -> tree lists): 1.6 s for 6 files\n"
+        "Phase 2 (SorSim): 9.9 s for 6 files\n"
+        "PHASE_TIMING convert_s=1.550 sorsim_s=9.928 files=6 cores=3\n"
+        "Time taken: 0:00:11\n"
+    )
+    assert scaling_run.parse_phase_timing(stdout) == {
+        "convert_s": 1.550, "sorsim_s": 9.928
+    }
+
+
+def test_a_missing_phase_line_is_not_fatal():
+    """Results written before phase timing existed, or a run that died early."""
+    assert scaling_run.parse_phase_timing("no marker here") == {}
+    assert scaling_run.parse_phase_timing("") == {}
+
+
+def test_a_malformed_phase_line_is_skipped_field_by_field():
+    stdout = "PHASE_TIMING convert_s=oops sorsim_s=9.9 files=6\n"
+    assert scaling_run.parse_phase_timing(stdout) == {"sorsim_s": 9.9}
+
+
+def test_the_last_phase_line_wins():
+    """process_files prints one per combination; the most recent is this run's."""
+    stdout = (
+        "PHASE_TIMING convert_s=1.0 sorsim_s=2.0 files=10 cores=2\n"
+        "PHASE_TIMING convert_s=3.0 sorsim_s=4.0 files=20 cores=2\n"
+    )
+    assert scaling_run.parse_phase_timing(stdout) == {"convert_s": 3.0, "sorsim_s": 4.0}
+
+
+def test_results_carry_the_phase_columns(tmp_path):
+    write_result(str(tmp_path), 20, 200, 24.7)
+    rows = plot_scaling.load_results(str(tmp_path))
+    assert "convert_s" in rows[0] and "sorsim_s" in rows[0]
+
+
+def test_the_plot_adds_a_phase_panel_when_the_split_is_present(tmp_path):
+    import csv
+
+    for cores in (5, 10, 20):
+        path = scaling_run.result_path(str(tmp_path), cores, 200)
+        os.makedirs(scaling_run.results_dir(str(tmp_path)), exist_ok=True)
+        row = {c: "" for c in scaling_run.RESULT_COLUMNS}
+        row.update(cores=cores, samples=200, elapsed_s=100.0 / cores,
+                   convert_s=8.0 / cores, sorsim_s=92.0 / cores,
+                   files_produced=200, files_per_s=200 / (100.0 / cores),
+                   case_study="Jurapark", scenario="BAU", cohort="dead", exit_code=0)
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(scaling_run.RESULT_COLUMNS))
+            writer.writeheader()
+            writer.writerow(row)
+
+    rows = plot_scaling.load_results(str(tmp_path))
+    assert all(r["sorsim_s"] is not None for r in rows)
+
+    out = str(tmp_path / "phases.png")
+    plot_scaling.plot(rows, out)
+    assert os.path.getsize(out) > 5000

@@ -74,6 +74,10 @@ def load_results(root):
                     # csv gives strings; without this every point compares != 0
                     # and the whole grid reports as failed.
                     row["exit_code"] = int(row["exit_code"])
+                    # Optional: absent from results written before phase timing.
+                    for phase in ("convert_s", "sorsim_s"):
+                        raw = row.get(phase, "")
+                        row[phase] = float(raw) if raw not in ("", None) else None
                 except (KeyError, ValueError) as exc:
                     print(f"Skipping malformed row in {path}: {exc}")
                     continue
@@ -83,10 +87,16 @@ def load_results(root):
 
 def print_table(rows):
     """The table view. Required relief for the low-contrast series, and useful."""
-    print(f"{'cores':>6} {'samples':>8} {'elapsed s':>10} {'files':>7} {'files/s':>9} {'exit':>5}")
+    print(f"{'cores':>6} {'samples':>8} {'elapsed s':>10} {'phase1 s':>9} {'phase2 s':>9} "
+          f"{'SorSim %':>9} {'files':>7} {'files/s':>9} {'exit':>5}")
     for row in rows:
+        c, s = row.get("convert_s"), row.get("sorsim_s")
+        share = f"{100*s/(c+s):>8.0f}%" if c is not None and s is not None and (c + s) else " " * 9
         print(f"{row['cores']:>6} {row['samples']:>8} {row['elapsed_s']:>10.1f} "
-              f"{row['files_produced']:>7} {row['files_per_s']:>9.3f} {row['exit_code']:>5}")
+              f"{(f'{c:9.1f}' if c is not None else ' ' * 9)}"
+              f"{(f'{s:10.1f}' if s is not None else ' ' * 10)}"
+              f"{share} {row['files_produced']:>7} {row['files_per_s']:>9.3f} "
+              f"{row['exit_code']:>5}")
 
 
 def style(ax):
@@ -115,7 +125,11 @@ def plot(rows, out_path, title_suffix=""):
             "categorical slots. Facet instead of adding hues."
         )
 
-    fig, (ax_time, ax_rate) = plt.subplots(1, 2, figsize=(11, 4.6))
+    has_phases = any(r.get("sorsim_s") is not None for r in rows)
+    n_panels = 3 if has_phases else 2
+    fig, axes = plt.subplots(1, n_panels, figsize=(5.5 * n_panels, 4.6))
+    ax_time, ax_rate = axes[0], axes[1]
+    ax_phase = axes[2] if has_phases else None
     fig.patch.set_facecolor("#fcfcfb")
 
     for index, samples in enumerate(sample_sizes):
@@ -164,6 +178,31 @@ def plot(rows, out_path, title_suffix=""):
         style(ax)
         ax.set_xticks(all_cores)
         ax.set_xlim(min(all_cores) - 1, max(all_cores) + max(2, max(all_cores) * 0.08))
+
+    if ax_phase is not None:
+        # Where the time actually goes. Phase 2 spawns a JVM per file and is what
+        # grows with volume; a single elapsed number hides that entirely.
+        labels, convert, sorsim = [], [], []
+        for row in sorted(rows, key=lambda r: (r["samples"], r["cores"])):
+            if row.get("convert_s") is None or row.get("sorsim_s") is None:
+                continue
+            labels.append(f"{row['cores']}c" + chr(10) + f"{row['samples']}f")
+            convert.append(row["convert_s"])
+            sorsim.append(row["sorsim_s"])
+
+        positions = range(len(labels))
+        ax_phase.bar(positions, convert, color=SERIES_COLOURS[0], label="phase 1 — tree lists",
+                     zorder=3, width=0.7)
+        ax_phase.bar(positions, sorsim, bottom=convert, color=SERIES_COLOURS[1],
+                     label="phase 2 — SorSim", zorder=3, width=0.7,
+                     edgecolor="#fcfcfb", linewidth=2)
+        ax_phase.set_xticks(list(positions))
+        ax_phase.set_xticklabels(labels, fontsize=8)
+        ax_phase.set_title("Where the time goes", color=INK, fontsize=12, loc="left", pad=10)
+        ax_phase.set_ylabel("seconds", color=INK_MUTED, fontsize=10)
+        ax_phase.set_ylim(bottom=0)
+        style(ax_phase)
+        ax_phase.legend(frameon=False, fontsize=9, labelcolor=INK_MUTED, loc="upper left")
 
     ax_rate.legend(frameon=False, fontsize=9, labelcolor=INK_MUTED, loc="upper left")
 

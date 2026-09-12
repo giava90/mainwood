@@ -23,12 +23,15 @@ import sys
 import time
 
 import paths
+from convert_data import PHASE_MARKER
 
 #: Columns of a result row, in order.
 RESULT_COLUMNS = (
     "cores",
     "samples",
     "elapsed_s",
+    "convert_s",
+    "sorsim_s",
     "files_produced",
     "files_per_s",
     "case_study",
@@ -52,6 +55,32 @@ def results_dir(bench_root):
 
 def result_path(bench_root, cores, samples):
     return os.path.join(results_dir(bench_root), f"scaling_{cores}c_{samples}s.csv")
+
+
+def parse_phase_timing(stdout):
+    """Pull the phase split out of stage 1's machine-readable line.
+
+    The two phases do not scale alike -- phase 1 is pandas, phase 2 spawns a JVM
+    per file and dominates at scale -- so a single elapsed figure is what made a
+    200-file benchmark under-predict a 60,870-file run by hours.
+
+    Returns:
+        dict[str, float]: ``{"convert_s": ..., "sorsim_s": ...}``, empty if the
+        line is absent (an older stage 1, or a run that died before printing it).
+    """
+    for line in reversed(stdout.splitlines()):
+        if not line.startswith(PHASE_MARKER):
+            continue
+        fields = {}
+        for token in line.split()[1:]:
+            key, _, value = token.partition("=")
+            if key in ("convert_s", "sorsim_s"):
+                try:
+                    fields[key] = float(value)
+                except ValueError:
+                    pass
+        return fields
+    return {}
 
 
 def count_outputs(output_root_path, case_study, scenario):
@@ -89,14 +118,27 @@ def main(argv):
     print(f"[{cores} cores / {samples} samples] {' '.join(command)}", flush=True)
 
     start = time.perf_counter()
-    completed = subprocess.run(command, env=env, cwd=os.path.dirname(os.path.abspath(__file__)))
+    completed = subprocess.run(
+        command, env=env, cwd=os.path.dirname(os.path.abspath(__file__)),
+        capture_output=True, text=True,
+    )
     elapsed = time.perf_counter() - start
+
+    # Echo the child's output so the job log still reads as it did.
+    if completed.stdout:
+        print(completed.stdout, end="", flush=True)
+    if completed.stderr:
+        print(completed.stderr, end="", flush=True)
+
+    phases = parse_phase_timing(completed.stdout or "")
 
     produced = count_outputs(root, case_study, scenario)
     row = {
         "cores": cores,
         "samples": samples,
         "elapsed_s": round(elapsed, 3),
+        "convert_s": round(phases["convert_s"], 3) if "convert_s" in phases else "",
+        "sorsim_s": round(phases["sorsim_s"], 3) if "sorsim_s" in phases else "",
         "files_produced": produced,
         "files_per_s": round(produced / elapsed, 4) if elapsed > 0 else 0,
         "case_study": case_study,

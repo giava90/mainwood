@@ -26,6 +26,7 @@ import subprocess
 import zipfile
 import sys
 import datetime as dt
+import time
 from multiprocessing import Pool, Manager
 
 import exclusions
@@ -37,6 +38,9 @@ from naming import (
     parse_forclim_filename,
     sorsim_output_filename,
 )
+
+#: Prefix of the machine-readable phase-timing line. scaling_run.py parses it.
+PHASE_MARKER = "PHASE_TIMING"
 
 
 def get_files_in_folder(folder_path):
@@ -134,12 +138,29 @@ def process_files(files, input_folder_path, output_folder_path, case_study, mana
         if sample == "True":
             files = files[: min(len(files), paths.sample_size())]
 
+        # The two phases are timed separately because they do not scale alike and
+        # their ratio moves with the number of files. Phase 1 is pandas reading and
+        # writing; phase 2 spawns a JVM per file and is the one that dominates at
+        # scale. A single elapsed figure hides that, which is how a 200-file
+        # benchmark came to under-predict a 60,870-file run.
         # Step 1: Convert ForClim Output in Parallel
+        convert_start = time.perf_counter()
         with Pool(processes=num_cores) as pool:
             pool.starmap(convert_forclim, [(file, input_folder_path, output_folder_path, case_study, management_scenario, failed, cohort) for file in files])
+        convert_s = time.perf_counter() - convert_start
+        print(f"Phase 1 (ForClim -> tree lists): {convert_s:,.1f} s for {len(files)} files", flush=True)
+
         # Step 2: Run SorSim in Parallel
+        sorsim_start = time.perf_counter()
         with Pool(processes=num_cores) as pool:
             pool.starmap(run_sorsim, [(file, output_folder_path, case_study, management_scenario, failed, save_intermediate, cohort) for file in files])
+        sorsim_s = time.perf_counter() - sorsim_start
+        print(f"Phase 2 (SorSim): {sorsim_s:,.1f} s for {len(files)} files", flush=True)
+
+        # One machine-readable line, so a benchmark does not have to guess at the
+        # split by parsing prose.
+        print(f"{PHASE_MARKER} convert_s={convert_s:.3f} sorsim_s={sorsim_s:.3f} "
+              f"files={len(files)} cores={num_cores}", flush=True)
 
         return list(failed)
 

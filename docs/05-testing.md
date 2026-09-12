@@ -1,7 +1,7 @@
 # Tests
 
 ```bash
-python -m pytest          # from the repository root, ~14 s, 225 tests
+python -m pytest          # from the repository root, ~14 s, 231 tests
 ```
 
 Pure Python — no Java, no SLURM, no data beyond what is in the repository. The suite runs

@@ -529,10 +529,30 @@ Each point runs in **its own output tree**. Nine concurrent stage 1 jobs writing
 measures the collision rather than the code. Each point also writes its own result file,
 so nine jobs finishing at once cannot interleave a line.
 
-`plot_scaling.py` prints the table and writes `<root>/scaling.png` with two panels: wall
-time, and throughput against an ideal-linear reference. **Throughput is the one to read** —
-wall time always falls with more cores, but throughput flattening is what tells you the
-extra cores stopped paying, and that is the number that decides `N_CORES` for the real run.
+`plot_scaling.py` prints the table and writes `<root>/scaling.png` with three panels: wall
+time, throughput against an ideal-linear reference, and **where the time goes**.
+
+Stage 1 runs as two sequential phases and they do not scale alike:
+
+| phase | what it does | cost |
+|---|---|---|
+| 1 | ForClim tables → SorSim tree lists | pandas; fast |
+| 2 | SorSim over each tree list | **a fresh JVM per file** |
+
+Phase 2 is typically **~90% of the run**, and its share grows with file size. A single
+elapsed figure hides that — which is how a 200-file benchmark under-predicted a
+60,870-file Jurapark run by hours. The table now carries `phase1 s`, `phase2 s` and
+`SorSim %` per grid point, and stage 1 prints the split into the job log whether or not
+it was launched from the benchmark:
+
+```
+Phase 1 (ForClim -> tree lists): 1.6 s for 6 files
+Phase 2 (SorSim): 9.9 s for 6 files
+```
+
+**Sample size matters more than core count** when estimating. The 40/80/200 defaults are
+a quick check; before committing walltime to a region of tens of thousands of files, run
+a grid whose top sample is in the thousands.
 
 The benchmark tree is disposable. Delete it when you have the plot:
 
