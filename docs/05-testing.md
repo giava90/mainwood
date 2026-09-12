@@ -1,7 +1,7 @@
 # Tests
 
 ```bash
-python -m pytest          # from the repository root, ~13 s, 217 tests
+python -m pytest          # from the repository root, ~14 s, 225 tests
 ```
 
 Pure Python — no Java, no SLURM, no data beyond what is in the repository. The suite runs
@@ -27,6 +27,7 @@ numbers that are off by a constant factor. The tests target exactly those failur
 | `test_exclusions.py` | `code/exclusions.py` | A stand with no area, or none in `stand.details.csv`, reaching the summary as a confident zero or a `NaN` |
 | `test_scaling.py` | `code/scaling_run.py`, `code/plot_scaling.py` | Grid points sharing an output tree or a result file, so the benchmark measures the collision rather than the code |
 | `test_alive_cohort.py` | the alive delivery end to end | Its different file names, its 2015-only snapshot, and its weights — each of which silently emptied or rescaled the summary |
+| `test_setup_data_tree.py` | `code/setup_data_tree.py` | A per-scenario alive folder (four copies of one snapshot), or directories created inside a filesystem that is not ours |
 | `test_paths.py` | `code/paths.py` per-machine path templates | A laptop-vs-Euler path edit leaking into a tracked file, or a typo'd placeholder silently reading an empty folder |
 
 ## The R side

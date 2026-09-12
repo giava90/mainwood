@@ -137,8 +137,22 @@ cd code
 python setup_data_tree.py --dry-run     # show, create nothing
 python setup_data_tree.py               # every region, every scenario
 python setup_data_tree.py Jurapark      # just one region
-python setup_data_tree.py --inputs      # also make inputs/, if you copy files onto scratch
+python setup_data_tree.py --no-inputs   # skip the inputs/ folders
 ```
+
+It creates, per region:
+
+```
+<region>/inputs/<scenario>/        one per scenario, for staged ForClim data
+<region>/intermediate/<scenario>/
+<region>/outputs/<scenario>/
+<region>/alive.trees/              ONE per region -- the alive delivery has no scenario
+```
+
+`inputs/` is created by default, because ForClim data is normally staged onto scratch
+rather than read from NFS in place. Only folders under the region root are created: if an
+input template points at the ForClim results tree or an NFS export, that is reported
+rather than silently creating directories in someone else's filesystem.
 
 It is idempotent — re-run it after a scratch purge and it rebuilds only what is gone.
 
@@ -293,6 +307,15 @@ cohort in any respect that matters:
 | simtypes | several | **7 only** — climate has not diverged yet |
 | planting | several variants per stand | **none**, one file per stand |
 
+**Stage it onto scratch first.** An NFS export does not hold up under 42 workers
+opening files at once the way a parallel filesystem does, and the copy takes a couple of
+minutes per region — one copy, since the delivery carries no scenario:
+
+```bash
+python setup_data_tree.py Misox          # makes <region>/alive.trees/
+cp -r /nfs/ites-formdata.ethz.ch/mnt/formdata/wood_valuation/Price/data/raw/Misox/alive.data/misox/*       /cluster/scratch/giacomov/mainwood/Misox/alive.trees/
+```
+
 The two cohorts are on **different filesystems**, so a single template with a
 `{cohort}` placeholder cannot reach both — pointed at the dead tree it resolves an
 alive run to a non-existent `.../mgmt_BAU/alive.trees/`. Set the cohort-specific
@@ -301,8 +324,12 @@ template keeps serving the dead cohort:
 
 ```bash
 MAINWOOD_INPUT_TEMPLATE='/cluster/work/climate/amauri/{case_study}/Results/mgmt_{scenario}/{cohort}.trees/'
-MAINWOOD_INPUT_TEMPLATE_ALIVE='/nfs/ites-formdata.ethz.ch/mnt/formdata/wood_valuation/Price/data/raw/{case_study}/alive.data/{case_study_lower}/'
+MAINWOOD_INPUT_TEMPLATE_ALIVE='/cluster/scratch/giacomov/mainwood/{case_study}/alive.trees/'
 ```
+
+To read the delivery in place instead, point that at
+`/nfs/.../raw/{case_study}/alive.data/{case_study_lower}/` — but measure it first with
+`scaling_benchmark.sh` against both, comparing the high-core rows.
 
 With both set, `./run_conversion.sh BAU Misox alive` and `preflight.py Misox BAU alive`
 resolve the right folder with no per-run override.

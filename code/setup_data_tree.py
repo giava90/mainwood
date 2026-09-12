@@ -13,11 +13,21 @@ Usage:
     python setup_data_tree.py Jurapark               # one region
     python setup_data_tree.py Jurapark WOOD          # one region, one scenario
     python setup_data_tree.py --dry-run              # show, create nothing
-    python setup_data_tree.py --inputs               # also make inputs/ (see below)
+    python setup_data_tree.py --no-inputs            # skip the inputs/ folders
 
-``inputs/`` is only needed when ForClim files are copied onto scratch rather than
-read from the delivery folder in place. It is not created unless you ask, so an
-empty ``inputs/`` never sits there looking like the run has nowhere to read from.
+``inputs/`` is created by default, because ForClim data is usually staged onto
+scratch rather than read from its delivery folder in place -- an NFS export does
+not hold up under 42 workers opening files at once the way a parallel filesystem
+does.
+
+``<region>/alive.trees/`` sits at the region root and carries no scenario of its
+own: the alive delivery is the 2015 snapshot taken before management diverges, so
+one copy serves BAU, WOOD, BIO and HYBRID alike. The name mirrors the
+``dead.trees/`` of the ForClim results tree.
+
+Only folders under the region root are created. If a configured input template
+points somewhere else -- the ForClim results tree, or an NFS export -- that is
+said rather than silently creating directories in someone else's filesystem.
 
 Stage 1 already creates ``intermediate/`` and ``outputs/`` on demand and stage 2
 creates the summary folder, so nothing here is strictly required -- it exists so
@@ -46,20 +56,44 @@ def planned_folders(case_studies, scenarios, want_inputs, local_env):
                 plan.append(("inputs", os.path.join(root, "inputs", scenario)))
             plan.append(("intermediate", os.path.join(root, "intermediate", scenario)))
             plan.append(("outputs", os.path.join(root, "outputs", scenario)))
+        if want_inputs:
+            # No scenario: the alive delivery is one snapshot per region. Named to
+            # mirror the dead cohort's dead.trees/ in the ForClim results tree.
+            plan.append(("alive.trees", os.path.join(root, "alive.trees")))
     plan.append(("summaries", paths.summary_dir(local_env)))
     return plan
+
+
+def external_inputs(case_studies, scenarios, local_env):
+    """Configured input templates that resolve outside the region root.
+
+    Those are read-only as far as we are concerned -- the ForClim results tree, or
+    an NFS export -- so they are reported rather than created.
+
+    Returns:
+        list[tuple[str, str]]: ``(cohort, folder)`` pairs, de-duplicated.
+    """
+    seen = {}
+    for case_study in case_studies:
+        root = os.path.normpath(
+            paths.output_folder(case_study, scenarios[0], local_env=local_env))
+        for cohort in ("dead", "alive"):
+            folder = paths.input_folder(case_study, scenarios[0], cohort, local_env)
+            if not os.path.normpath(folder).startswith(root):
+                seen.setdefault(folder, cohort)
+    return [(cohort, folder) for folder, cohort in seen.items()]
 
 
 def main(argv):
     flags = {a for a in argv[1:] if a.startswith("--")}
     positional = [a for a in argv[1:] if not a.startswith("--")]
 
-    unknown = flags - {"--dry-run", "--inputs"}
+    unknown = flags - {"--dry-run", "--inputs", "--no-inputs"}
     if unknown:
         raise SystemExit(f"Unknown option(s): {sorted(unknown)}\n\n{__doc__}")
 
     dry_run = "--dry-run" in flags
-    want_inputs = "--inputs" in flags
+    want_inputs = "--no-inputs" not in flags
 
     case_studies = (
         regions.resolve_case_studies(regions.check_case_study(positional[0]))
@@ -97,7 +131,13 @@ def main(argv):
     print(f"{verb} {created} folder(s); {existed} already existed.")
 
     if not want_inputs:
-        print("inputs/ not created -- pass --inputs if you copy ForClim files onto scratch.")
+        print("inputs/ skipped (--no-inputs).")
+    else:
+        for cohort, folder in external_inputs(case_studies, scenarios, local_env):
+            print(f"Note: the {cohort} input template points outside the region root,")
+            print(f"      at {folder}")
+            print("      Nothing was created there. Either read it in place, or stage it")
+            print(f"      into the region root and point MAINWOOD_INPUT_TEMPLATE_{cohort.upper()} there.")
 
     # Only worth flagging when the two disagree: assortments on scratch but the
     # summaries built from them landing somewhere else. Stage 2 hardcoded
