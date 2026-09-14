@@ -77,14 +77,15 @@ def write_summary(summaries, base_path, fmt="parquet", compression=DEFAULT_COMPR
             # in the Euler module stack. Losing hours of completed work to a
             # missing writer is worse than writing the other format, and
             # find_summary() looks for either extension -- so the result stays
-            # readable by plot_only and by read_summaries.R. Loud, never silent.
+            # readable by the plotting scripts and by read_summaries.R.
+            # Loud, never silent.
             path = summary_path(base_path, "csv")
             summaries.to_csv(path)
             print("")
             print("*** pyarrow is not installed, so the summary could not be written")
             print("*** as Parquet. It has been written as CSV instead, to")
             print(f"***   {path}")
-            print("*** The numbers are identical and plot_only reads either format.")
+            print("*** The numbers are identical and read_summary takes either format.")
             print("*** For Parquet: pip install --user pyarrow, then re-run stage 2.")
             print("*** Run code/preflight.py before a job to catch this up front.")
             print("")

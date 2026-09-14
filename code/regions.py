@@ -3,7 +3,8 @@
 Until 2026-09 this list was copy-pasted into five entry points
 (``convert_data``, ``convert_data_from_intermediate``, ``summarize_and_create_plots``,
 ``plot_only``, ``preflight``), and they had already drifted apart: ``plot_only``
-silently dropped ``HYBRID`` while the others kept it. Onboarding a region meant
+silently dropped ``HYBRID`` while the others kept it. (``plot_only`` has since
+been deleted; see docs/11-changelog.md.) Onboarding a region meant
 finding all five and getting all five right; miss one and the run aborts on an
 argument check hours after you thought you were done.
 
@@ -37,8 +38,9 @@ def valid_scenarios(include_all=True, exclude=()):
     Args:
         include_all (bool): Include the ``ALL`` wildcard.
         exclude (tuple): Scenarios this particular entry point does not support.
-            ``plot_only`` uses it to keep its long-standing exclusion of
-            ``HYBRID`` visible rather than hidden in a diverged copy of the list.
+            ``plot_only`` used it to keep its exclusion of ``HYBRID`` visible
+            rather than hidden in a diverged copy of the list. It is kept for the
+            next script that needs to narrow the set.
     """
     return [s for s in SCENARIOS if s not in exclude] + ([ALL_SCENARIOS] if include_all else [])
 

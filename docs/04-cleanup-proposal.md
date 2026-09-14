@@ -106,7 +106,7 @@ before doing anything else.
 rm -f figures/all_figs.tar.gz     # 48 MB archive of the 25 MB folder next to it
 ```
 
-`figures/` is git-ignored and every PNG is reproducible with `code/plot_only.py`. If you
+`figures/` is git-ignored and every PNG is reproducible by re-running stage 2. If you
 want a snapshot for a paper, keep the folder and drop the tarball.
 
 ## F. Documentation duplicates

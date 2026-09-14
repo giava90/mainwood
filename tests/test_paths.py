@@ -185,10 +185,8 @@ def test_summaries_can_follow_the_assortments_onto_scratch(no_env, monkeypatch):
     monkeypatch.setenv("MAINWOOD_SUMMARY_DIR", "/cluster/scratch/giacomov/mainwood/summaries_for_plots")
     monkeypatch.setenv("MAINWOOD_OUTPUT_TEMPLATE", "/cluster/scratch/giacomov/mainwood/{case_study}/")
 
-    import plot_only
     import summarize_and_create_plots
 
     expected = "/cluster/scratch/giacomov/mainwood/summaries_for_plots"
     assert summarize_and_create_plots.paths.summary_dir() == expected
-    assert plot_only.paths.summary_dir() == expected
     assert "/scratch/" in paths.output_folder("Jurapark", "WOOD")

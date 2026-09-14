@@ -29,7 +29,7 @@ working tree — same category.
 
 Git remembers all of it; nothing is lost by deleting.
 
-### 2. Stop duplicating `plot_only.py` — it has already drifted
+### 2. Stop duplicating `plot_only.py` — ~~proposal~~ **resolved 2026-09-14: deleted**
 
 `code/plot_only.py` is 305 lines, of which **256 are near-copies** of functions in
 `summarize_and_create_plots.py`:
@@ -47,9 +47,9 @@ without `HYBRID`, and filters `simtype == 1` as an integer where the summariser 
 string `'1'`. Both are individually correct in their own context, but nobody can tell that
 by looking.
 
-The fix is small and safe: move the plotting functions into `code/plots.py`, and have both
-scripts import them. No logic changes, and the figures are byte-comparable before and
-after.
+Resolved by deleting `plot_only.py` rather than deduplicating it: stage 2 already draws
+the same figures, and the paper figures are drawn by `code/make_paper_figures.py` from its
+own module. Nothing now depends on the 256 duplicated lines.
 
 ### 3. Split the 1 270-line module along the seams it already has
 

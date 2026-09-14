@@ -23,7 +23,6 @@ flowchart TD
 
     H --> I["data/summaries_for_plots/&lt;region&gt;_&lt;scenario&gt;.csv<br/><b>the deliverable</b>"]
     H --> J["figures/*.png"]
-    I --> K["code/plot_only.py<br/>re-plot without re-reading SorSim"]
     K --> J
 ```
 
@@ -35,7 +34,7 @@ flowchart TD
 | SorSim tree lists | `data/<region>/intermediate/<scenario>/` | `output_input_converter.py` | No — deleted automatically unless `save_intermediate=True` |
 | SorSim assortments | `data/<region>/outputs/<scenario>/` | `run_sorsim.py` | On scratch only — expensive to recompute (Java, one JVM per file) |
 | **Regional summaries** | `data/summaries_for_plots/` | `summarize_and_create_plots.py` | **Yes — this is the product** |
-| Figures | `figures/` | stage 2 or `plot_only.py` | Cheap to regenerate from the summaries |
+| Figures | `figures/` | stage 2 | Cheap to regenerate from the summaries |
 
 ## Stage 1 — `code/convert_data.py`
 

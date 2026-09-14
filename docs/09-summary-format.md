@@ -107,7 +107,7 @@ exactly what the pipeline wrote before.
 | `code/summary_to_csv.py` | Standalone streaming Parquet → CSV converter |
 | `code/read_summaries.R` | R-side reader and column documentation |
 
-`plot_only.py` now reads whichever format exists. Its `simtype` filter was comparing
+`read_summary` takes whichever format exists. `plot_only.py`'s `simtype` filter was comparing
 against the integer `1`; that matched nothing when the summary came from Parquet (where
 `simtype` is text), so it now compares as text and raises if the selection is empty
 instead of silently plotting nothing.

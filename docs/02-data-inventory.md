@@ -11,7 +11,6 @@ total is `data/summaries_for_plots/`.**
 | `code/convert_data.py` | Stage 1 driver: ForClim → SorSim tree list → assortments | active |
 | `code/convert_data_from_intermediate.py` | Same, but starts from tree lists already on disk (resume after a failed SorSim step) | active, rarely used |
 | `code/summarize_and_create_plots.py` | Stage 2: assortments → `summaries_for_plots` + figures | active, 1270 lines |
-| `code/plot_only.py` | Re-plots from an existing summary CSV — no SorSim reading | active |
 | `code/run_conversion.sh` | `sbatch` wrapper for stage 1 | active |
 | `code/run_analysis.sh` | `sbatch` wrapper for stage 2 | active |
 | `code/bash_code_to_create_folder_structure_for_data.sh` | `mkdir` skeleton for a new region | **superseded** by `code/setup_data_tree.py`, which reads the configured paths |
@@ -100,7 +99,7 @@ stand × planting variant × climate). Surselva has 7 444 stands.
 `figures/` holds 32 current PNGs plus `figures/all_figs/` (39 PNGs, 25 MB) and
 `figures/all_figs.tar.gz` (48 MB — a *larger* archive of the same 39 files, made before
 the folder was unpacked). Everything here is reproducible from the summaries with
-`code/plot_only.py`. `figures/` is in `.gitignore`.
+stage 2. `figures/` is in `.gitignore`.
 
 ## Repository hygiene
 

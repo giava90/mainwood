@@ -1,7 +1,8 @@
 """The single list of regions and scenarios (code/regions.py).
 
 Onboarding a region used to mean editing five copies of the same list, and they
-had already drifted (``plot_only`` dropped ``HYBRID``, the others kept it).
+had already drifted (the now-deleted ``plot_only`` dropped ``HYBRID``, the
+others kept it).
 These tests pin that there is now one list, that the wildcard tokens keep their
 two different spellings, and that the one deliberate divergence stays possible.
 """
@@ -48,8 +49,12 @@ def test_a_single_value_resolves_to_itself():
     assert regions.resolve_scenarios("WOOD") == ["WOOD"]
 
 
-def test_plot_only_can_still_exclude_hybrid():
-    """A deliberate per-script narrowing stays possible, and stays visible."""
+def test_a_script_can_narrow_the_scenario_list():
+    """A deliberate per-script narrowing stays possible, and stays visible.
+
+    plot_only used this to drop HYBRID before it was deleted; the capability is
+    kept because the next script to need it should declare it here rather than
+    keeping its own diverging copy of the list."""
     assert "HYBRID" not in regions.valid_scenarios(exclude=("HYBRID",))
     assert "HYBRID" in regions.valid_scenarios()
     assert regions.resolve_scenarios("ALL", exclude=("HYBRID",)) == ["BAU", "WOOD", "BIO"]

@@ -123,7 +123,7 @@ Spell it exactly as it appears in the ForClim file names; `naming.forclim_patter
 matches against this string.
 
 > Before 2026-09 this list was copy-pasted into five entry points, and they had already
-> drifted — `plot_only` silently dropped `HYBRID` while the others kept it. If you need a
+> drifted — `plot_only` (since deleted) silently dropped `HYBRID`. If you need a
 > script to support a narrower set, pass `exclude=` to `regions.valid_scenarios()` so the
 > exception stays visible instead of becoming a sixth divergent copy.
 
@@ -575,19 +575,32 @@ same configuration stage 1 used.
 The cohort is read back from each tree list name, so a folder containing both
 `deadCohorts*` and `aliveCohorts*` is handled in one pass.
 
-## 5. Re-plotting only
+## 4.5 The paper figures
 
-Figures are cheap; the summaries are not. To change a plot, do not re-run stage 2:
+Separate from the figures stage 2 draws. The paper's take fixed axes, a year window
+(2020-2160) and per-panel legends, and they come from their own module:
 
 ```bash
-python plot_only.py <Region> BAU ../data 1 False
+cd code
+python make_paper_figures.py                      # Vaud + Entlebuch, BAU + WOOD
+python make_paper_figures.py --case-study Vaud --simtype 7
+python make_paper_figures.py --data /cluster/scratch/giacomov/mainwood/summaries_for_plots                             --outdir ~/paper-figures
 ```
 
-It reads `../data/summaries_for_plots/<Region>_<scenario>.{parquet,csv}` — whichever
-exists. Both it and stage 2 now select RCP 8.5 by comparing `simtype` as text, so the
-result no longer depends on which format the summary was stored in.
+`--data` defaults to `MAINWOOD_SUMMARY_DIR`, so it follows `local.env` like everything
+else. Output goes to `../figures_paper/` unless `--outdir` says otherwise. It needs only
+pandas and matplotlib — no Java, no SLURM — and takes about four seconds.
 
-## 6. Tests
+`code/plotting_tools_for_paper.py` holds the four figure functions, **copied verbatim**
+from the code that drew the published figures; regenerating the SZF set from it produces
+byte-identical PNGs. Do not tidy those bodies: their value is that they match what was
+published. The pipeline's own figures are drawn by different code in
+`summarize_and_create_plots.py`, and keeping the two apart is deliberate.
+
+`Y_MAX` is tuned for Vaud and Entlebuch. A new region will need its own value before the
+absolute-volume panels read correctly.
+
+## 5. Tests
 
 ```bash
 python -m pytest            # from the repository root
