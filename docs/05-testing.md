@@ -1,7 +1,7 @@
 # Tests
 
 ```bash
-python -m pytest          # from the repository root, ~14 s, 231 tests
+python -m pytest          # from the repository root, ~15 s, 240 tests
 ```
 
 Pure Python — no Java, no SLURM, no data beyond what is in the repository. The suite runs
@@ -28,6 +28,7 @@ numbers that are off by a constant factor. The tests target exactly those failur
 | `test_scaling.py` | `code/scaling_run.py`, `code/plot_scaling.py` | Grid points sharing an output tree or a result file, so the benchmark measures the collision rather than the code |
 | `test_alive_cohort.py` | the alive delivery end to end | Its different file names, its 2015-only snapshot, and its weights — each of which silently emptied or rescaled the summary |
 | `test_setup_data_tree.py` | `code/setup_data_tree.py` | A per-scenario alive folder (four copies of one snapshot), or directories created inside a filesystem that is not ours |
+| `test_no_shared_state.py` | stage 1 failure reporting | The Manager-list deadlock that froze a 48-core run at 0% CPU for five hours while SLURM called it RUNNING |
 | `test_paths.py` | `code/paths.py` per-machine path templates | A laptop-vs-Euler path edit leaking into a tracked file, or a typo'd placeholder silently reading an empty folder |
 
 ## The R side

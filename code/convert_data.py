@@ -27,7 +27,7 @@ import zipfile
 import sys
 import datetime as dt
 import time
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 
 import exclusions
 import paths
@@ -62,7 +62,7 @@ def run_command(command):
         return False
 
 
-def convert_forclim(file, input_folder_path, output_folder_path, case_study, management_scenario, failed, cohort="dead"):
+def convert_forclim(file, input_folder_path, output_folder_path, case_study, management_scenario, cohort="dead"):
     """Converts one ForClim output file into a SorSim tree list.
 
     The cohort decides both which column of the ForClim file holds the number of
@@ -73,18 +73,18 @@ def convert_forclim(file, input_folder_path, output_folder_path, case_study, man
     parsed = parse_forclim_filename(file, case_study, cohort)
     if parsed is None:
         print(f"Skipping {file}: does not match the {cohort}-cohort naming convention.")
-        failed.append(file)
-        return
+        return file
     stand, simtype = parsed
     dead_cohorts = "True" if cohort == "dead" else "False"
     command = (f"python ../minimal/output_input_converter.py {input_folder_path} {file} "
                f"{output_folder_path}/intermediate/{management_scenario}/ "
                f"{intermediate_filename(stand, simtype, cohort)} {dead_cohorts}")
     if not run_command(command):
-        failed.append(file)  # Store failed file
+        return file          # the caller collects these; see process_files
+    return None
 
 
-def run_sorsim(file, output_folder_path, case_study, management_scenario, failed, save_intermediate=False, cohort="dead"):
+def run_sorsim(file, output_folder_path, case_study, management_scenario, save_intermediate=False, cohort="dead"):
     """Runs SorSim on the tree list produced by :func:`convert_forclim`.
 
     Args:
@@ -92,15 +92,15 @@ def run_sorsim(file, output_folder_path, case_study, management_scenario, failed
         output_folder_path (str): ``../data/<case_study>/``.
         case_study (str): Region name.
         management_scenario (str): BAU / WOOD / HYBRID / BIO.
-        failed (list): Shared list of files that failed an earlier step.
         save_intermediate (str): "True" to zip the tree list, otherwise delete it.
         cohort (str): "dead" or "alive".
+
+    Returns:
+        str | None: The file name if SorSim failed, otherwise None.
     """
-    if file in failed:
-        return  # Skip failed files
     parsed = parse_forclim_filename(file, case_study, cohort)
     if parsed is None:
-        return  # already reported by convert_forclim
+        return file  # already reported by convert_forclim
     stand, simtype = parsed
     intermediate_path = (f"{output_folder_path}/intermediate/{management_scenario}/"
                          f"{intermediate_filename(stand, simtype, cohort)}")
@@ -109,7 +109,7 @@ def run_sorsim(file, output_folder_path, case_study, management_scenario, failed
                f"{output_folder_path}/outputs/{management_scenario}/"
                f"{sorsim_output_filename(stand, simtype, cohort)} 6 True")
     if not run_command(command):
-        failed.append(file)  # Store failed file
+        return file
     elif save_intermediate == "True":
         compress_file(stand, simtype, output_folder_path, management_scenario, cohort)
     else:
@@ -131,38 +131,55 @@ def process_files(files, input_folder_path, output_folder_path, case_study, mana
         cohort (str): "dead" or "alive" cohort of the ForClim simulation.
 
     Returns:
-        list: List of files that failed to process."""
-    with Manager() as manager:
-        failed = manager.list()
+        list: List of files that failed to process.
 
-        if sample == "True":
-            files = files[: min(len(files), paths.sample_size())]
+    Failures are returned by the workers rather than appended to a
+    ``multiprocessing.Manager`` list. The shared list cost one remote call per
+    file -- ``run_sorsim`` tested ``file in failed`` for every one of them -- and
+    the manager spawns a thread per connection. At 48 workers over 60,870 files a
+    real run exhausted the thread limit outright::
 
-        # The two phases are timed separately because they do not scale alike and
-        # their ratio moves with the number of files. Phase 1 is pandas reading and
-        # writing; phase 2 spawns a JVM per file and is the one that dominates at
-        # scale. A single elapsed figure hides that, which is how a 200-file
-        # benchmark came to under-predict a 60,870-file run.
-        # Step 1: Convert ForClim Output in Parallel
-        convert_start = time.perf_counter()
-        with Pool(processes=num_cores) as pool:
-            pool.starmap(convert_forclim, [(file, input_folder_path, output_folder_path, case_study, management_scenario, failed, cohort) for file in files])
-        convert_s = time.perf_counter() - convert_start
-        print(f"Phase 1 (ForClim -> tree lists): {convert_s:,.1f} s for {len(files)} files", flush=True)
+        RuntimeError: can't start new thread   (managers.py, accepter)
 
-        # Step 2: Run SorSim in Parallel
-        sorsim_start = time.perf_counter()
-        with Pool(processes=num_cores) as pool:
-            pool.starmap(run_sorsim, [(file, output_folder_path, case_study, management_scenario, failed, save_intermediate, cohort) for file in files])
-        sorsim_s = time.perf_counter() - sorsim_start
-        print(f"Phase 2 (SorSim): {sorsim_s:,.1f} s for {len(files)} files", flush=True)
+    after which the manager stopped accepting, every worker blocked on its next
+    call, and the job sat at 0% CPU for hours while SLURM still reported it
+    RUNNING. Nothing is shared now, so there is nothing to exhaust.
+    """
+    if sample == "True":
+        files = files[: min(len(files), paths.sample_size())]
 
-        # One machine-readable line, so a benchmark does not have to guess at the
-        # split by parsing prose.
-        print(f"{PHASE_MARKER} convert_s={convert_s:.3f} sorsim_s={sorsim_s:.3f} "
-              f"files={len(files)} cores={num_cores}", flush=True)
+    # The two phases are timed separately because they do not scale alike and
+    # their ratio moves with the number of files. Phase 1 is pandas reading and
+    # writing; phase 2 spawns a JVM per file and is the one that dominates at
+    # scale. A single elapsed figure hides that, which is how a 200-file
+    # benchmark came to under-predict a 60,870-file run.
+    # Step 1: Convert ForClim Output in Parallel
+    convert_start = time.perf_counter()
+    with Pool(processes=num_cores) as pool:
+        convert_results = pool.starmap(convert_forclim, [(file, input_folder_path, output_folder_path, case_study, management_scenario, cohort) for file in files])
+    failed_convert = [f for f in convert_results if f is not None]
+    convert_s = time.perf_counter() - convert_start
+    print(f"Phase 1 (ForClim -> tree lists): {convert_s:,.1f} s for {len(files)} files", flush=True)
 
-        return list(failed)
+    # Step 2: Run SorSim in Parallel
+    # Phase 1's failures never wrote a tree list, so skip them here rather
+    # than asking a shared list about every file.
+    skip = set(failed_convert)
+    for_sorsim = [f for f in files if f not in skip]
+
+    sorsim_start = time.perf_counter()
+    with Pool(processes=num_cores) as pool:
+        sorsim_results = pool.starmap(run_sorsim, [(file, output_folder_path, case_study, management_scenario, save_intermediate, cohort) for file in for_sorsim])
+    failed_sorsim = [f for f in sorsim_results if f is not None]
+    sorsim_s = time.perf_counter() - sorsim_start
+    print(f"Phase 2 (SorSim): {sorsim_s:,.1f} s for {len(for_sorsim)} files", flush=True)
+
+    # One machine-readable line, so a benchmark does not have to guess at the
+    # split by parsing prose.
+    print(f"{PHASE_MARKER} convert_s={convert_s:.3f} sorsim_s={sorsim_s:.3f} "
+          f"files={len(for_sorsim)} cores={num_cores}", flush=True)
+
+    return failed_convert + failed_sorsim
 
 
 def parse_filename(filename, case_study, management_scenario=None, cohort="dead"):

@@ -67,6 +67,45 @@ correctly, so the special case is gone.
 
 ---
 
+## Fixed on 2026-09-13
+
+### 9. Stage 1 deadlocked on its own shared failure list — *the Jurapark hang*
+
+A 48-core Jurapark run (60,870 files) produced 7,906 outputs and then stopped
+completely: zero files for more than five hours, 0% CPU, while SLURM reported it
+`RUNNING`. The job log had the answer:
+
+```
+Exception in thread Thread-1 (accepter):
+  File ".../multiprocessing/managers.py", line 194, in accepter
+    t.start()
+RuntimeError: can't start new thread
+```
+
+`process_files` kept the failed-file list in a `multiprocessing.Manager` list, and
+`run_sorsim` tested `file in failed` for **every** file. Each test is a remote call
+into the manager process, and the manager spawns a thread per connection. At 48
+workers over 60,870 files it exhausted the thread limit; once the accepter died the
+manager stopped accepting, and every worker blocked forever on its next call.
+
+Two things made this hard to read from outside:
+
+- `MaxRSS` was 50 GB of 122 GB requested, so it was never a memory problem — the
+  obvious first theory, and wrong.
+- `sstat` returned nothing for the live job, and `sacct` showed `TotalCPU
+  00:00:00` until the job ended, so "is it using CPU" could not be answered while
+  it mattered. The completed record shows `2-15:04:34` — it worked, then flatlined.
+
+Failures are now ordinary return values collected from `starmap`, and phase 1's
+failures are filtered out before phase 2 rather than re-queried per file. There is
+no shared object left to exhaust. `tests/test_no_shared_state.py` pins it,
+including that no `failed` parameter and no `Manager()` returns to either
+converter.
+
+This also removed 60,870 remote calls from the run, each transferring a growing
+list — a likely part of why 48 cores managed only 20 files/h/core while 16 cores
+managed 72.7.
+
 ## Open — worth knowing, not changed
 
 ### 6. `preprocess_data` relies on pandas index alignment for the planting weight

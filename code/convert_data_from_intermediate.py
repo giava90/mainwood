@@ -14,7 +14,8 @@ import subprocess
 import zipfile
 import sys
 import datetime as dt
-from multiprocessing import Pool, Manager
+import time
+from multiprocessing import Pool
 
 import exclusions
 import paths
@@ -44,14 +45,14 @@ def run_command(command):
         print("STDERR:", e.stderr)
         return False
 
-def run_sorsim(file, output_folder_path, case_study, management_scenario, failed, save_intermediate=False):
+def run_sorsim(file, output_folder_path, case_study, management_scenario, save_intermediate=False):
     """Runs SorSim on an intermediate tree list that already exists on disk.
 
     The cohort is read back from the tree list name, so a folder holding both
     ``deadCohorts*`` and ``aliveCohorts*`` files is processed correctly in one go.
     """
-    if file in failed:
-        return  # Skip failed files
+    # No shared-state membership test here: it cost one Manager round trip per
+    # file, and the manager spawns a thread per connection. See process_files.
     parsed = parse_intermediate_filename(file)
     if parsed is None:
         print(f"Skipping {file}: not an intermediate SorSim tree list.")
@@ -64,7 +65,7 @@ def run_sorsim(file, output_folder_path, case_study, management_scenario, failed
                f"{output_folder_path}/outputs/{management_scenario}/"
                f"{sorsim_output_filename(stand, simtype, cohort)} 6 True")
     if not run_command(command):
-        failed.append(file)  # Store failed file
+        return file          # collected by the caller
     elif save_intermediate == "True":
         compress_file(stand, simtype, output_folder_path, management_scenario, cohort)
     else:
@@ -84,17 +85,21 @@ def process_files(files, input_folder_path, output_folder_path, case_study, mana
         save_intermediate (bool): Whether to save intermediate files as zip.
     Returns:
         list: List of files that failed to process."""
-    with Manager() as manager:
-        failed = manager.list()
 
-        if sample == "True":
-            files = files[: min(len(files), paths.sample_size())]
-        
-        # Step 2: Run SorSim in Parallel
-        with Pool(processes=num_cores) as pool:
-            pool.starmap(run_sorsim, [(file, output_folder_path, case_study, management_scenario, failed, save_intermediate) for file in files])
+    if sample == "True":
+        files = files[: min(len(files), paths.sample_size())]
 
-        return list(failed)
+    # Failures come back as return values. The Manager list this replaced cost
+    # one remote call per file and spawns a thread per connection; at 48 workers
+    # over 60,870 files that hit the thread limit outright and every worker
+    # blocked forever. See convert_data.process_files.
+    sorsim_start = time.perf_counter()
+    with Pool(processes=num_cores) as pool:
+        results = pool.starmap(run_sorsim, [(file, output_folder_path, case_study, management_scenario, save_intermediate) for file in files])
+    sorsim_s = time.perf_counter() - sorsim_start
+    print(f"Phase 2 (SorSim): {sorsim_s:,.1f} s for {len(files)} files", flush=True)
+
+    return [f for f in results if f is not None]
 
 
 
