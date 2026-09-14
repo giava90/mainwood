@@ -7,6 +7,9 @@ their lookup tables stayed behind, because carrying them would mean maintaining 
 second copy of code nothing in this repository runs.
 
 Do not "improve" these bodies. Their value is that they match what was published.
+The one edit made to them is an explicit ``observed=False`` on the Baumart
+groupby: that is the current pandas default, so the output is unchanged, and
+pinning it stops a future pandas release from altering a published figure.
 If a figure needs to change, change it deliberately and say so in the commit --
 the paper figures and the pipeline's own figures (``summarize_and_create_plots``)
 are already drawn by different code, and this module exists so that difference is
@@ -25,7 +28,13 @@ import matplotlib.pyplot as plt
 
 def prepare_data_for_sank_plot(df_2, year_before = 2030, year_after = 2050):
     df = (
-        df_2.groupby("Baumart")
+        # observed=False is today's default, passed explicitly. Baumart is a
+        # Categorical (compact_dtypes makes it one and Parquet preserves it), and
+        # pandas is changing this default to True. Under True, a species with no
+        # volume left after filtering would vanish from the result instead of
+        # appearing as a zero -- silently changing a published figure on a pandas
+        # upgrade. Pinning it is not a change in behaviour: it is what happens now.
+        df_2.groupby("Baumart", observed=False)
         .apply(lambda g: pd.Series({
             "volume_before": g.loc[g["year"] <= year_before, "Volumen OR [m3]"].sum(),
             "volume_after": g.loc[g["year"] >= year_after, "Volumen OR [m3]"].sum()
