@@ -106,6 +106,41 @@ This also removed 60,870 remote calls from the run, each transferring a growing
 list — a likely part of why 48 cores managed only 20 files/h/core while 16 cores
 managed 72.7.
 
+## Checked, not a defect
+
+### Jurapark BAU looked like the WOOD scenario — *checked 2026-09-14, no code issue*
+
+The species composition of Jurapark BAU under RCP 8.5 showed Buche falling 42% to
+2% and Foehre rising 8% to 48%, which reads more like the paper's WOOD scenario
+than its BAU.
+
+Checked and cleared:
+
+* the stage 1 code path is clean — one scenario variable drives the input path,
+  the output path and both subfolders, so a `mgmt_BAU` input cannot produce a
+  WOOD-labelled output;
+* the preflight log for that run printed the resolved input folder as
+  `/cluster/work/climate/amauri/Jurapark/Results/mgmt_BAU/dead.trees/`.
+
+One thing I had wrong, corrected by the person running these: **planting is not
+scenario-specific — it happens under BAU too.** What is WOOD-only is
+*plantations*, the small planted conifer stands of Douglasie and Weisstanne. So
+`planted_species` values other than 999 in a BAU summary are expected and carry no
+signal about which folder was read. `diagnose_summary.py` said otherwise and has
+been corrected.
+
+Their note on the remaining surprise, left as written:
+
+> I am still surprised by the shift in species composition from Beech to Foehre.
+> Beech is an hardwood species. However, this surprise is linked to a lack on
+> ecological understanding from my side.
+
+Worth keeping alongside it: Foehre is not a WOOD signature either — WOOD plants
+Douglasie and Weisstanne, which appear as `Ubrige Nadelholz` and `Tanne` and were
+only 5% and 10% in that figure. And the paper's "Buche und Fichte stay above 50%
+under BAU" is stated for **RCP 4.5**, while this figure is RCP 8.5, where the paper
+says the decline is stronger without giving a number.
+
 ## Open — worth knowing, not changed
 
 ### 6. `preprocess_data` relies on pandas index alignment for the planting weight

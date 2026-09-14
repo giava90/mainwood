@@ -51,6 +51,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 import paths
+from summary_io import list_summaries, locate_summary
 from plotting_tools_for_paper import (
     plot_biomass_by_diameter_class,
     plot_change_in_species_comp,
@@ -127,13 +128,8 @@ def discover(data_dir):
         year-binned figures here have nothing to draw.
     """
     found = {}
-    for entry in sorted(os.listdir(data_dir)):
-        stem, extension = os.path.splitext(entry)
-        if extension not in (".parquet", ".csv"):
-            continue
-        if stem.endswith("_alive"):
-            continue
-        if "_" not in stem:
+    for stem in list_summaries(data_dir):
+        if stem.endswith("_alive") or "_" not in stem:
             continue
         case_study, _, management = stem.rpartition("_")
         found.setdefault(case_study, [])
@@ -165,15 +161,12 @@ def load_summary(data_dir, case_study, management, simtype):
         pandas.DataFrame | None: The filtered frame, or None if there is no
         summary for this combination or nothing survives the filters.
     """
-    base = os.path.join(data_dir, f"{case_study}_{management}")
-    for extension, reader in ((".parquet", pd.read_parquet), (".csv", pd.read_csv)):
-        path = base + extension
-        if os.path.isfile(path):
-            break
-    else:
+    path = locate_summary(data_dir, f"{case_study}_{management}")
+    if path is None:
         print(f"  no summary for {case_study} / {management} -- skipped")
         return None
 
+    reader = pd.read_parquet if path.endswith(".parquet") else pd.read_csv
     frame = reader(path)
     print(f"  {os.path.basename(path)}: {len(frame):,} rows")
 

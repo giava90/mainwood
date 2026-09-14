@@ -94,6 +94,68 @@ def write_summary(summaries, base_path, fmt="parquet", compression=DEFAULT_COMPR
     return path
 
 
+#: Sub-folders searched inside a summary directory, best first. Parquet is
+#: preferred everywhere; the empty string is the directory itself, for folders
+#: that were never split into parquet/ and csv/.
+SUMMARY_SUBDIRS = ("parquet", "csv", "")
+
+
+def summary_search_path(data_dir):
+    """The folders to look in, in order, for a summary directory.
+
+    ``summaries_to_parquet.py`` splits a folder into ``parquet/`` and ``csv/``.
+    Readers must prefer Parquet wherever it exists and fall back to CSV, without
+    every script inventing its own order -- that is how the region list and the
+    stand.details path came to disagree before.
+
+    Args:
+        data_dir (str): A summary directory, split or not.
+
+    Returns:
+        list[str]: Existing folders, Parquet first.
+    """
+    found = []
+    for name in SUMMARY_SUBDIRS:
+        candidate = os.path.join(data_dir, name) if name else data_dir
+        if os.path.isdir(candidate):
+            found.append(candidate)
+    return found
+
+
+def locate_summary(data_dir, stem):
+    """Find one summary by name, searching parquet/ then csv/ then the folder.
+
+    Args:
+        data_dir (str): A summary directory, split or not.
+        stem (str): File name without extension, e.g. ``Jurapark_BAU``.
+
+    Returns:
+        str or None: The path that exists, preferring Parquet.
+    """
+    for folder in summary_search_path(data_dir):
+        found = find_summary(os.path.join(folder, stem))
+        if found is not None:
+            return found
+    return None
+
+
+def list_summaries(data_dir):
+    """Every summary stem available, wherever it lives.
+
+    A stem present as both Parquet and CSV is listed once.
+
+    Returns:
+        dict[str, str]: stem -> the path that would be read.
+    """
+    found = {}
+    for folder in summary_search_path(data_dir):
+        for entry in sorted(os.listdir(folder)):
+            stem, extension = os.path.splitext(entry)
+            if extension in SUMMARY_EXTENSIONS and stem not in found:
+                found[stem] = os.path.join(folder, entry)
+    return found
+
+
 def find_summary(base_path):
     """Finds an existing summary file for ``base_path``, whatever its format.
 

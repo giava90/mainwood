@@ -131,3 +131,39 @@ EOF
 
 Read the 6.6 GB one in chunks if memory is tight, or simply re-run stage 2 — which now
 takes minutes rather than hours.
+
+
+## Converting the old CSV summaries
+
+The summaries produced before the Parquet switch are large: 9.7 GB for
+`Entlebuch_WOOD`, about 49 GB for a full set. Reading them is what makes a figure
+run take minutes rather than seconds.
+
+```bash
+cd code
+python summaries_to_parquet.py <folder>                  # writes <folder>/parquet/
+python summaries_to_parquet.py <folder> --organise       # also moves CSVs to csv/
+python summaries_to_parquet.py <folder> --only Misox_BIO
+```
+
+Measured on `Misox_BIO`: 279 MB to 39 MB, **7.2x smaller**, 6 seconds. Each file is
+verified against its CSV on row count and volume total before the next one starts,
+and a file that fails is deleted rather than left half-written.
+
+It streams in chunks, because these files are larger than memory, and reads
+`planted_species` as text explicitly. That column holds both `999` and codes like
+`00` and `PMen`; inferred per chunk it would be integer in one and string in the
+next, and the write would fail partway through a multi-GB file.
+
+### Where readers look
+
+`summary_io.summary_search_path` defines one order for everything:
+
+```
+<folder>/parquet/    then    <folder>/csv/    then    <folder>/
+```
+
+So a half-converted folder works — Parquet for what has been converted, CSV for
+the rest — and a folder that was never split keeps working unchanged. `--organise`
+is optional for that reason; converting alone is enough to make every reader
+prefer Parquet.

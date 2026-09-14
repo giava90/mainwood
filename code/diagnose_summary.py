@@ -5,10 +5,12 @@ WOOD scenario than its BAU. Volume totals cannot settle that -- regions differ i
 area and stand count -- so this reports m3 per hectare per year alongside the two
 things that distinguish the scenarios in the paper:
 
-* **planting.** Planted conifer stands are a WOOD feature (Douglasie and
-  Weisstanne, up to 30% of forest area in Vaud and 18% in Entlebuch). A BAU
-  summary carrying planted species is the single clearest sign that the wrong
-  ForClim folder was read.
+* **planting is NOT a discriminator.** Corrected 2026-09-14 by the person who
+  runs these: planting happens under BAU too. What is WOOD-only is *plantations*
+  -- the small planted conifer stands of Douglasie and Weisstanne, up to 30% of
+  forest area in Vaud and 18% in Entlebuch. So a BAU summary carrying
+  ``planted_species`` values other than 999 is expected, and says nothing about
+  which folder was read. The ``plantation`` flag is the WOOD-only one.
 * **species composition.** Under BAU, Buche and Fichte decline but stay
   substantial; under WOOD they fall below roughly 10% of assortments.
 
@@ -29,6 +31,7 @@ import sys
 import pandas as pd
 
 import paths
+from summary_io import list_summaries, locate_summary
 
 VOLUME = "Volumen OR [m3]"
 
@@ -41,13 +44,9 @@ WOOD_PLANTED_HINTS = ("Tanne", "Ubrige Nadelholz", "Douglasie")
 
 
 def find_summary(data_dir, case_study, management, cohort="dead"):
-    """Locate one summary, Parquet before CSV."""
+    """Locate one summary, searching parquet/ then csv/ then the folder itself."""
     suffix = "" if cohort == "dead" else f"_{cohort}"
-    base = os.path.join(data_dir, f"{case_study}_{management}{suffix}")
-    for extension in (".parquet", ".csv"):
-        if os.path.isfile(base + extension):
-            return base + extension
-    return None
+    return locate_summary(data_dir, f"{case_study}_{management}{suffix}")
 
 
 def stand_area(case_study):
@@ -86,14 +85,15 @@ def describe(path, case_study, management):
         share = frame.loc[planted != "999", VOLUME].sum() / frame[VOLUME].sum() * 100
         print(f"  planted_species values: {list(counts.index[:8])}")
         if len(non_default):
-            print(f"  *** {len(non_default)} planted species present, "
-                  f"{share:.1f}% of volume ***")
-            print("      Planted conifer stands are a WOOD feature in the paper.")
-            print("      A BAU summary carrying them is worth explaining.")
+            print(f"  {len(non_default)} planted species present, {share:.1f}% of volume")
+            print("      Expected under BAU as well as WOOD -- planting is not")
+            print("      scenario-specific. Plantations are; see the flag below.")
         else:
-            print("  no planting (all 999) -- consistent with BAU")
+            print("  no planting (all 999)")
     if "plantation" in frame.columns:
-        print(f"  plantation flag set on {100 * frame['plantation'].mean():.1f}% of rows")
+        pct = 100 * frame["plantation"].mean()
+        print(f"  plantation flag set on {pct:.1f}% of rows"
+              + ("   <-- plantations are the WOOD-only feature" if pct else ""))
 
     # --- volume in comparable units ---------------------------------------
     area = stand_area(case_study)
@@ -151,9 +151,8 @@ def main(argv=None):
 
     targets = []
     if args.all:
-        for entry in sorted(os.listdir(data_dir)):
-            stem, extension = os.path.splitext(entry)
-            if extension in (".parquet", ".csv") and "_" in stem:
+        for stem in list_summaries(data_dir):
+            if "_" in stem:
                 case_study, _, rest = stem.partition("_")
                 targets.append((case_study, rest))
     else:

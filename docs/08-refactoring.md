@@ -29,9 +29,9 @@ working tree — same category.
 
 Git remembers all of it; nothing is lost by deleting.
 
-### 1b. OPEN TASK — a CSV/Parquet converter, and a consistent read order
+### 1b. A CSV/Parquet converter, and a consistent read order — **done 2026-09-14**
 
-*Raised 2026-09-14. Not started.*
+*Raised and completed 2026-09-14. See `code/summaries_to_parquet.py`.*
 
 The summaries exist as ~49 GB of CSV in
 `SDM/data/processed/summaries_for_plots` and reading them dominates every figure
@@ -50,6 +50,13 @@ What to build:
 
 Note `code/summary_to_csv.py` already goes the other direction (Parquet to CSV,
 for collaborators whose pipeline reads CSV). This is its counterpart.
+
+**Outcome.** `summaries_to_parquet.py` streams the conversion in chunks, so a 9.7 GB
+file never loads whole, and verifies each result against the CSV on row count and
+volume total before moving on. Measured on Misox_BIO: 279 MB to 39 MB, **7.2x
+smaller**, 6 seconds. The read order lives in `summary_io.summary_search_path` --
+`parquet/`, then `csv/`, then the folder itself -- and `make_paper_figures.py` and
+`diagnose_summary.py` both use it rather than each carrying their own order.
 
 ### 2. Stop duplicating `plot_only.py` — ~~proposal~~ **resolved 2026-09-14: deleted**
 
