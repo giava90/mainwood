@@ -35,10 +35,15 @@ def prepare_data_for_sank_plot(df_2, year_before = 2030, year_after = 2050):
         # appearing as a zero -- silently changing a published figure on a pandas
         # upgrade. Pinning it is not a change in behaviour: it is what happens now.
         df_2.groupby("Baumart", observed=False)
+        # include_groups=False adopts pandas' future behaviour, which is safe here
+        # precisely because the lambda never touches the grouping column -- only
+        # year and the volume. Verified identical both ways. Note this is the
+        # opposite call from observed= above: there the coming default WOULD change
+        # the numbers, so the current behaviour is pinned instead.
         .apply(lambda g: pd.Series({
             "volume_before": g.loc[g["year"] <= year_before, "Volumen OR [m3]"].sum(),
             "volume_after": g.loc[g["year"] >= year_after, "Volumen OR [m3]"].sum()
-        }))
+        }), include_groups=False)
         .reset_index()
     )
     return df
