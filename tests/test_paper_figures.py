@@ -105,3 +105,65 @@ def test_no_figures_is_reported_as_a_failure(tmp_path, capsys):
                      "--case-study", "Nowhere"])
     assert code == 1
     assert "No figures written" in capsys.readouterr().out
+
+
+# ---------------------------------------- discovery and the y-axis limit ----
+
+def write(tmp_path, name):
+    make_summary().to_parquet(tmp_path / name) if name.endswith(".parquet") \
+        else make_summary().to_csv(tmp_path / name, index=False)
+
+
+def test_regions_are_discovered_from_the_summaries(tmp_path):
+    """A new region should need no code change."""
+    for name in ("Vaud_BAU.parquet", "Vaud_WOOD.parquet", "Surselva_BIO.csv",
+                 "Jurapark_BAU.parquet"):
+        write(tmp_path, name)
+
+    found = mpf.discover(str(tmp_path))
+    assert found == {"Jurapark": ["BAU"], "Surselva": ["BIO"], "Vaud": ["BAU", "WOOD"]}
+
+
+def test_alive_summaries_are_not_discovered(tmp_path):
+    """The alive cohort is a single 2015 snapshot; these figures bin by decade,
+    so there is nothing for them to draw."""
+    write(tmp_path, "Misox_BAU.parquet")
+    write(tmp_path, "Misox_BAU_alive.parquet")
+
+    assert mpf.discover(str(tmp_path)) == {"Misox": ["BAU"]}
+
+
+def test_unrelated_files_are_ignored(tmp_path):
+    write(tmp_path, "Vaud_BAU.parquet")
+    (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "nounderscore.parquet").write_bytes(b"x")
+
+    assert mpf.discover(str(tmp_path)) == {"Vaud": ["BAU"]}
+
+
+def test_the_published_regions_keep_their_published_axis():
+    """170,000 is an empirical constant for the two regions in the paper. Losing
+    it would silently change figures that are already published."""
+    for region in ("Vaud", "Entlebuch"):
+        y_max, why = mpf.resolve_y_max(region, None)
+        assert y_max == 170_000
+        assert "published" in why
+
+
+def test_any_other_region_is_auto_scaled():
+    """Applying Vaud's limit to a region with a different harvest scale gives
+    bars squashed into the floor or clipped off the top."""
+    y_max, why = mpf.resolve_y_max("Surselva", None)
+    assert y_max is None
+    assert "no published value" in why
+
+
+def test_the_axis_can_be_forced_either_way():
+    assert mpf.resolve_y_max("Vaud", "auto") == (None, "requested with --y-max auto")
+    y_max, why = mpf.resolve_y_max("Surselva", "250000")
+    assert y_max == 250_000 and "--y-max" in why
+
+
+def test_an_empty_data_folder_says_so(tmp_path):
+    with pytest.raises(SystemExit, match="No summaries found"):
+        mpf.main(["--data", str(tmp_path), "--outdir", str(tmp_path / "out")])

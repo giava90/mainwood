@@ -4,11 +4,20 @@ The plotting logic of ``plots_scaling_for_paper.ipynb``, extracted so it can run
 on a compute node: no Jupyter, no display, explicit paths, one output folder.
 
 Run:
-    python make_paper_figures.py                       # Vaud + Entlebuch, BAU + WOOD
-    python make_paper_figures.py --case-study Vaud
+    python make_paper_figures.py                       # everything found in --data
+    python make_paper_figures.py --case-study Surselva
     python make_paper_figures.py --simtype 7           # RCP 4.5 instead of 8.5
+    python make_paper_figures.py --y-max auto          # scale every region to its own data
     python make_paper_figures.py --data /cluster/scratch/giacomov/mainwood/summaries_for_plots \
                                 --outdir ~/paper-figures
+
+Regions and scenarios are discovered from the summaries present, so a new region
+needs no code change. Summaries are read as Parquet or CSV, Parquet first.
+
+The absolute-volume axis is the one thing that does not generalise: 170,000 m3 was
+chosen for Vaud and Entlebuch so their panels are comparable, and it is not a
+property of the data. Any other region is auto-scaled unless ``--y-max`` says
+otherwise, and the run prints which it used for each.
 
 Needs only :mod:`plotting_tools_for_paper`, pandas and matplotlib. No Java, no
 py4j, no SLURM -- it runs on a login node in seconds.
@@ -61,9 +70,16 @@ RC_PARAMS = {
     "axes.labelweight": "normal",
 }
 
-#: Works for both Vaud and Entlebuch, per the notebook. A new region may need its
-#: own value before the panels read correctly.
-Y_MAX = 170_000
+#: The absolute-volume axis limit, in m3. This is an empirical constant chosen for
+#: the two regions the paper covers so their panels are directly comparable; it is
+#: not a property of the data. Applying it to a region with a different harvest
+#: scale gives bars squashed into the floor or clipped off the top, so any region
+#: not listed here is auto-scaled instead.
+#:
+#: Auto-scaling is done by matplotlib, by passing y_max=None to the plotting
+#: functions. Computing it here would mean replicating their binning -- they bin by
+#: decade and plot a per-year figure, so a naive peak is about ten times too large.
+PUBLISHED_Y_MAX = {"Vaud": 170_000, "Entlebuch": 170_000}
 
 #: The published figures cover 2020 to 2160.
 YEAR_LO, YEAR_HI = 2020, 2160
@@ -102,6 +118,46 @@ def redirect_savefig(outdir):
     return written
 
 
+def discover(data_dir):
+    """Which (region, scenario) summaries are actually present.
+
+    Returns:
+        dict[str, list[str]]: Scenarios per region, both sorted. Alive summaries
+        are skipped: they are a single 2015 snapshot with no time axis, so the
+        year-binned figures here have nothing to draw.
+    """
+    found = {}
+    for entry in sorted(os.listdir(data_dir)):
+        stem, extension = os.path.splitext(entry)
+        if extension not in (".parquet", ".csv"):
+            continue
+        if stem.endswith("_alive"):
+            continue
+        if "_" not in stem:
+            continue
+        case_study, _, management = stem.rpartition("_")
+        found.setdefault(case_study, [])
+        if management not in found[case_study]:
+            found[case_study].append(management)
+    return {k: sorted(v) for k, v in sorted(found.items())}
+
+
+def resolve_y_max(case_study, override):
+    """The y-axis limit for one region, and why.
+
+    Returns:
+        tuple[float | None, str]: ``(y_max, reason)``. ``None`` means matplotlib
+        scales the axis itself.
+    """
+    if override == "auto":
+        return None, "requested with --y-max auto"
+    if override is not None:
+        return float(override), "from --y-max"
+    if case_study in PUBLISHED_Y_MAX:
+        return PUBLISHED_Y_MAX[case_study], "the published value for this region"
+    return None, "no published value for this region"
+
+
 def load_summary(data_dir, case_study, management, simtype):
     """Read one summary and apply the notebook's filters.
 
@@ -136,19 +192,19 @@ def load_summary(data_dir, case_study, management, simtype):
     return None if frame.empty else frame
 
 
-def plot_one(frame, case_study, management, simtype, add_legend):
+def plot_one(frame, case_study, management, simtype, add_legend, y_max):
     """The three per-(region, scenario) figures from notebook cells 7 and 9."""
     fname = str(simtype)
     plot_biomass_by_diameter_class(
         frame, show=False, save=True, percent=True, plantation_separate=False,
-        fname=fname, y_max=Y_MAX, case_study=case_study, management=management,
+        fname=fname, y_max=y_max, case_study=case_study, management=management,
         add_legend=add_legend)
     plot_percentages_of_wood(
         frame, save=True, show=False, fname=fname, plantation_separate=False,
-        y_max=Y_MAX, case_study=case_study, management=management, add_legend=False)
+        y_max=y_max, case_study=case_study, management=management, add_legend=False)
     plot_percentages_of_wood(
         frame, save=True, show=False, fname=fname, percent=False,
-        plantation_separate=False, y_max=Y_MAX, case_study=case_study,
+        plantation_separate=False, y_max=y_max, case_study=case_study,
         management=management, add_legend=add_legend)
 
 
@@ -160,16 +216,24 @@ def main(argv=None):
     parser.add_argument("--outdir", default=os.path.join(HERE, "..", "figures_paper"),
                         help="where every figure is written")
     parser.add_argument("--case-study", action="append", dest="case_studies",
-                        help="repeatable; default Vaud and Entlebuch")
+                        help="repeatable; default: every region found in --data")
     parser.add_argument("--management", action="append", dest="managements",
-                        help="repeatable; default BAU and WOOD")
+                        help="repeatable; default: every scenario found for each region")
+    parser.add_argument("--y-max", default=None,
+                        help="absolute-volume axis limit in m3, or 'auto'. "
+                             "Default: the published value for Vaud and Entlebuch, "
+                             "auto for every other region")
     parser.add_argument("--simtype", default="1", help="1 = RCP 8.5 (default), 7 = RCP 4.5")
     parser.add_argument("--no-sankey", action="store_true",
                         help="skip the species-composition change figures")
     args = parser.parse_args(argv)
 
-    case_studies = args.case_studies or ["Vaud", "Entlebuch"]
-    managements = args.managements or ["BAU", "WOOD"]
+    available = discover(os.path.abspath(args.data or paths.summary_dir()))
+    case_studies = args.case_studies or list(available)
+    if not case_studies:
+        raise SystemExit(
+            f"No summaries found in {os.path.abspath(args.data or paths.summary_dir())}. "
+            "Run stage 2 first, or pass --data.")
     # Default to the configured summary folder, so this follows local.env like
     # everything else rather than carrying its own idea of where the data is.
     data_dir = os.path.abspath(args.data or paths.summary_dir())
@@ -178,6 +242,7 @@ def main(argv=None):
     print(f"data    {data_dir}")
     print(f"outdir  {outdir}")
     print(f"simtype {args.simtype} ({RCP.get(str(args.simtype), 'unknown')})")
+    print(f"regions {', '.join(case_studies)}")
     print()
 
     if not os.path.isdir(data_dir):
@@ -188,8 +253,12 @@ def main(argv=None):
     start = dt.datetime.now()
 
     for case_study in case_studies:
+        y_max, why = resolve_y_max(case_study, args.y_max)
+        shown = f"{y_max:,.0f} m3" if y_max is not None else "auto"
+        print(f"{case_study}: y-axis {shown} -- {why}")
+
         frames = {}
-        for management in managements:
+        for management in (args.managements or available.get(case_study, [])):
             print(f"{case_study} / {management}")
             frame = load_summary(data_dir, case_study, management, args.simtype)
             if frame is None:
@@ -197,7 +266,7 @@ def main(argv=None):
             frames[management] = frame
             # The published figures carry the legend on the BAU panel.
             plot_one(frame, case_study, management, args.simtype,
-                     add_legend=(management == "BAU"))
+                     add_legend=(management == "BAU"), y_max=y_max)
             plt.close("all")
 
         if not args.no_sankey:

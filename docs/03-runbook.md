@@ -582,10 +582,29 @@ Separate from the figures stage 2 draws. The paper's take fixed axes, a year win
 
 ```bash
 cd code
-python make_paper_figures.py                      # Vaud + Entlebuch, BAU + WOOD
-python make_paper_figures.py --case-study Vaud --simtype 7
+python make_paper_figures.py                      # every region found in --data
+python make_paper_figures.py --case-study Surselva
+python make_paper_figures.py --simtype 7          # RCP 4.5
+python make_paper_figures.py --y-max auto         # scale each region to its own data
 python make_paper_figures.py --data /cluster/scratch/giacomov/mainwood/summaries_for_plots                             --outdir ~/paper-figures
 ```
+
+Regions and scenarios are **discovered from the summaries present**, so a new region
+needs no code change. Alive summaries are skipped: they are a single 2015 snapshot and
+these figures bin by decade, so there would be nothing to draw.
+
+**The y-axis is the one thing that does not generalise.** `170,000 m3` was chosen so Vaud
+and Entlebuch are directly comparable; it is not a property of the data. Those two keep
+it, every other region is auto-scaled, and the run says which it used:
+
+```
+Vaud: y-axis 170,000 m3 -- the published value for this region
+Surselva: y-axis auto -- no published value for this region
+```
+
+Pass `--y-max 250000` to force a shared limit across regions, or `--y-max auto` to
+auto-scale everything including Vaud and Entlebuch. Reproducing the published figures is
+the default and stays byte-identical.
 
 `--data` defaults to `MAINWOOD_SUMMARY_DIR`, so it follows `local.env` like everything
 else. Output goes to `../figures_paper/` unless `--outdir` says otherwise. It needs only
@@ -597,8 +616,9 @@ byte-identical PNGs. Do not tidy those bodies: their value is that they match wh
 published. The pipeline's own figures are drawn by different code in
 `summarize_and_create_plots.py`, and keeping the two apart is deliberate.
 
-`Y_MAX` is tuned for Vaud and Entlebuch. A new region will need its own value before the
-absolute-volume panels read correctly.
+**Read Parquet, not CSV, where you can.** The old Surselva CSV summaries are 5.0 GB
+(BAU) and 6.6 GB (WOOD); the same data as Parquet is roughly 5x smaller and 7x faster to
+read. `make_paper_figures.py` prefers `.parquet` when both exist.
 
 ## 5. Tests
 
