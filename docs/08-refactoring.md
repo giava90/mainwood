@@ -29,6 +29,28 @@ working tree — same category.
 
 Git remembers all of it; nothing is lost by deleting.
 
+### 1b. OPEN TASK — a CSV/Parquet converter, and a consistent read order
+
+*Raised 2026-09-14. Not started.*
+
+The summaries exist as ~49 GB of CSV in
+`SDM/data/processed/summaries_for_plots` and reading them dominates every figure
+run: 8m31s for two regions, 11m41s for Jurapark. The same data as Parquet is
+roughly five times smaller and several times faster.
+
+What to build:
+
+1. A small script that converts a folder of summary CSVs to Parquet, writing into
+   a `parquet/` folder beside a `csv/` folder rather than mixing the two formats
+   in one directory.
+2. A sweep of the scripts that read summaries — `make_paper_figures.py`,
+   `diagnose_summary.py`, `summary_io.read_summary` — confirming each one looks
+   for `.parquet` first and falls back to `.csv`. Some already do; the point is to
+   check them all and make the order deliberate rather than incidental.
+
+Note `code/summary_to_csv.py` already goes the other direction (Parquet to CSV,
+for collaborators whose pipeline reads CSV). This is its counterpart.
+
 ### 2. Stop duplicating `plot_only.py` — ~~proposal~~ **resolved 2026-09-14: deleted**
 
 `code/plot_only.py` is 305 lines, of which **256 are near-copies** of functions in
